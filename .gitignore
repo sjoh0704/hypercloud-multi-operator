@@ -31,3 +31,6 @@ bin
 
 # Test yaml
 build/test
+
+# image 
+!image/*
