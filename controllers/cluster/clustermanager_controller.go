@@ -62,10 +62,13 @@ type ClusterParameter struct {
 }
 
 type AwsParameter struct {
-	SshKey     string
-	Region     string
-	MasterType string
-	WorkerType string
+	Region  string
+	Bastion clusterV1alpha1.Instance
+	Master  clusterV1alpha1.Instance
+	Worker  clusterV1alpha1.Instance
+	// HostOs string
+	// NetworkSpec
+
 }
 
 type VsphereParameter struct {
@@ -108,6 +111,7 @@ type ClusterManagerReconciler struct {
 // +kubebuilder:rbac:groups="",resources=services;endpoints,verbs=create;delete;get;list;patch;update;watch
 // +kubebuilder:rbac:groups=traefik.containo.us,resources=middlewares,verbs=create;delete;get;list;patch;update;watch
 // +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=create;delete;get;list;patch;update;watch
+// +kubebuilder:rbac:groups=batch,resources=jobs,verbs=create;delete;get;list;patch;update;watch
 
 func (r *ClusterManagerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 	_ = context.Background()
@@ -251,13 +255,14 @@ func (r *ClusterManagerReconciler) reconcile(ctx context.Context, clusterManager
 		phases = append(
 			phases,
 			// cluster manager 의  metadata 와 provider 정보를 service instance 의 parameter 값에 넣어 service instance 를 생성한다.
-			r.CreateServiceInstance,
+			// r.CreateServiceInstance,
 			// cluster manager 가 바라봐야 할 cluster 의 endpoint 를 annotation 으로 달아준다.
-			r.SetEndpoint,
+			// r.SetEndpoint,
 			// cluster claim 을 통해, cluster 의 spec 을 변경한 경우, 그에 맞게 master 노드의 spec 을 업데이트 해준다.
-			r.kubeadmControlPlaneUpdate,
+			// r.kubeadmControlPlaneUpdate,
 			// cluster claim 을 통해, cluster 의 spec 을 변경한 경우, 그에 맞게 worker 노드의 spec 을 업데이트 해준다.
-			r.machineDeploymentUpdate,
+			// r.machineDeploymentUpdate,
+			r.ProvisioningCluster,
 		)
 	} else {
 		// cluster 를 등록한 경우에만 수행
@@ -380,19 +385,11 @@ func (r *ClusterManagerReconciler) reconcileDelete(ctx context.Context, clusterM
 
 func (r *ClusterManagerReconciler) reconcilePhase(_ context.Context, clusterManager *clusterV1alpha1.ClusterManager) {
 	if clusterManager.Status.Phase == "" {
-		if clusterManager.Labels[clusterV1alpha1.LabelKeyClmClusterType] == clusterV1alpha1.ClusterTypeRegistered {
-			clusterManager.Status.SetTypedPhase(clusterV1alpha1.ClusterManagerPhaseRegistering)
-		} else {
-			clusterManager.Status.SetTypedPhase(clusterV1alpha1.ClusterManagerPhaseProvisioning)
-		}
+		clusterManager.Status.SetTypedPhase(clusterV1alpha1.ClusterManagerPhaseProvisioning)
 	}
 
 	if clusterManager.Status.Ready {
-		if clusterManager.Labels[clusterV1alpha1.LabelKeyClmClusterType] == clusterV1alpha1.ClusterTypeRegistered {
-			clusterManager.Status.SetTypedPhase(clusterV1alpha1.ClusterManagerPhaseRegistered)
-		} else {
-			clusterManager.Status.SetTypedPhase(clusterV1alpha1.ClusterManagerPhaseProvisioned)
-		}
+		clusterManager.Status.SetTypedPhase(clusterV1alpha1.ClusterManagerPhaseProvisioned)
 	}
 
 	if !clusterManager.DeletionTimestamp.IsZero() {

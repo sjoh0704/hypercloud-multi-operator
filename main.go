@@ -27,7 +27,8 @@ import (
 	clustercontroller "github.com/tmax-cloud/hypercloud-multi-operator/controllers/cluster"
 	k8scontroller "github.com/tmax-cloud/hypercloud-multi-operator/controllers/k8s"
 	traefikV1alpha1 "github.com/traefik/traefik/v2/pkg/provider/kubernetes/crd/traefik/v1alpha1"
-
+	batchV1 "k8s.io/api/batch/v1"
+	coreV1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -53,6 +54,9 @@ func init() {
 	utilruntime.Must(servicecatalogv1beta1.AddToScheme(scheme))
 	utilruntime.Must(certmanagerV1.AddToScheme((scheme)))
 	utilruntime.Must(traefikV1alpha1.AddToScheme(scheme))
+	utilruntime.Must(batchV1.AddToScheme(scheme))
+	utilruntime.Must(coreV1.AddToScheme(scheme))
+
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -100,14 +104,14 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "ClusterManager")
 		os.Exit(1)
 	}
-	if err = (&claimV1alpha1.ClusterClaim{}).SetupWebhookWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create webhook", "webhook", "ClusterClaim")
-		os.Exit(1)
-	}
-	if err = (&clusterV1alpha1.ClusterManager{}).SetupWebhookWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create webhook", "webhook", "ClusterManager")
-		os.Exit(1)
-	}
+	// if err = (&claimV1alpha1.ClusterClaim{}).SetupWebhookWithManager(mgr); err != nil {
+	// 	setupLog.Error(err, "unable to create webhook", "webhook", "ClusterClaim")
+	// 	os.Exit(1)
+	// }
+	// if err = (&clusterV1alpha1.ClusterManager{}).SetupWebhookWithManager(mgr); err != nil {
+	// 	setupLog.Error(err, "unable to create webhook", "webhook", "ClusterManager")
+	// 	os.Exit(1)
+	// }
 
 	// if err = (&clusterController.ClusterReconciler{
 	// 	Client: mgr.GetClient(),
@@ -141,10 +145,10 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "ClusterRegistration")
 		os.Exit(1)
 	}
-	if err = (&clusterV1alpha1.ClusterRegistration{}).SetupWebhookWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create webhook", "webhook", "ClusterRegistration")
-		os.Exit(1)
-	}
+	// if err = (&clusterV1alpha1.ClusterRegistration{}).SetupWebhookWithManager(mgr); err != nil {
+	// 	setupLog.Error(err, "unable to create webhook", "webhook", "ClusterRegistration")
+	// 	os.Exit(1)
+	// }
 	// +kubebuilder:scaffold:builder
 
 	setupLog.Info("starting manager")

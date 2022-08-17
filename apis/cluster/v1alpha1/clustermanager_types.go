@@ -58,11 +58,31 @@ type ProviderAwsSpec struct {
 	// The region where VM is working
 	Region string `json:"region,omitempty"`
 	// The ssh key info to access VM
-	SshKey string `json:"sshKey,omitempty"`
-	// The type of VM for master node
-	MasterType string `json:"masterType,omitempty"`
-	// The type of VM for worker node
-	WorkerType string `json:"workerType,omitempty"`
+	Bastion Instance `json:"bastion,omitempty"`
+
+	Master Instance `json:"master,omitempty"`
+
+	Worker Instance `json:"worker,omitempty"`
+
+	HostOS string `json:"hostOs,omitempty"`
+
+	NetworkSpec NetworkSpec `json:"networkSpec,omitempty"`
+
+	AdditionalTags map[string]string `json:"additionalTags,omitempty"`
+}
+
+type Instance struct {
+	// InstanceType
+	Type string `json:"type,omitempty"`
+	// InstanceNum
+	Num int `json:"num,omitempty"`
+	// InstanceDiskSize
+	DiskSize int `json:"diskSize,omitempty"`
+}
+type NetworkSpec struct {
+	VpcCidrBlock           string   `json:"vpcCidrBlock,omitempty"`
+	PrivateSubnetCidrBlock []string `json:"privateSubnetCidrBlock,omitempty"`
+	PublicSubnetCidrBlock  []string `json:"publicSubnetCidrBlock,omitempty"`
 }
 
 // ProviderVsphereSpec defines
@@ -116,6 +136,9 @@ type ClusterManagerStatus struct {
 	AuthClientReady        bool                    `json:"authClientReady,omitempty"`
 	HyperregistryOidcReady bool                    `json:"hyperregistryOidcReady,omitempty"`
 	OpenSearchReady        bool                    `json:"openSearchReady,omitempty"`
+	K8sReady               bool                    `json:"k8sReady,omitempty"`
+	InfrastructureReady    bool                    `json:"infrastructureReady,omitempty"`
+	KubeconfigReady        bool                    `json:"kubeconfigReady,omitempty"`
 	// will be deprecated
 	PrometheusReady bool `json:"prometheusReady,omitempty"`
 }
@@ -133,15 +156,9 @@ const (
 	// object associated and can start provisioning.
 	ClusterManagerPhaseProvisioning = ClusterManagerPhase("Provisioning")
 
-	// object associated and can start provisioning.
-	ClusterManagerPhaseRegistering = ClusterManagerPhase("Registering")
-
 	// ClusterManagerPhaseProvisioned is the state when its
 	// infrastructure has been created and configured.
 	ClusterManagerPhaseProvisioned = ClusterManagerPhase("Provisioned")
-
-	// infrastructure has been created and configured.
-	ClusterManagerPhaseRegistered = ClusterManagerPhase("Registered")
 
 	// ClusterManagerPhaseDeleting is the Cluster state when a delete
 	// request has been sent to the API Server,
@@ -182,6 +199,16 @@ const (
 func (c *ClusterManagerStatus) SetTypedPhase(p ClusterManagerPhase) {
 	c.Phase = string(p)
 }
+
+type JobType string
+
+const (
+	ProvisioningInfrastrucutre = "provisioning-infrastructure"
+	InstallingK8s              = "installing-k8s"
+	CreatingKubeconfig         = "creating-kubeconfig"
+
+	AnnotationKeyJobType = "clustermanager.cluster.tmax.io/job-type"
+)
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status

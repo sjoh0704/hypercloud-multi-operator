@@ -4,7 +4,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.6.2
+    controller-gen.kubebuilder.io/version: v0.7.0
   creationTimestamp: null
   name: clustermanagers.cluster.tmax.io
 spec:
@@ -64,18 +64,65 @@ spec:
           awsSpec:
             description: ProviderAwsSpec defines
             properties:
-              masterType:
-                description: The type of VM for master node
+              additionalTags:
+                additionalProperties:
+                  type: string
+                type: object
+              bastion:
+                description: The ssh key info to access VM
+                properties:
+                  diskSize:
+                    description: InstanceDiskSize
+                    type: integer
+                  num:
+                    description: InstanceNum
+                    type: integer
+                  type:
+                    description: InstanceType
+                    type: string
+                type: object
+              hostOs:
                 type: string
+              master:
+                properties:
+                  diskSize:
+                    description: InstanceDiskSize
+                    type: integer
+                  num:
+                    description: InstanceNum
+                    type: integer
+                  type:
+                    description: InstanceType
+                    type: string
+                type: object
+              networkSpec:
+                properties:
+                  privateSubnetCidrBlock:
+                    items:
+                      type: string
+                    type: array
+                  publicSubnetCidrBlock:
+                    items:
+                      type: string
+                    type: array
+                  vpcCidrBlock:
+                    type: string
+                type: object
               region:
                 description: The region where VM is working
                 type: string
-              sshKey:
-                description: The ssh key info to access VM
-                type: string
-              workerType:
-                description: The type of VM for worker node
-                type: string
+              worker:
+                properties:
+                  diskSize:
+                    description: InstanceDiskSize
+                    type: integer
+                  num:
+                    description: InstanceNum
+                    type: integer
+                  type:
+                    description: InstanceType
+                    type: string
+                type: object
             type: object
           kind:
             description: 'Kind is a string value representing the REST resource this
@@ -119,6 +166,12 @@ spec:
               gatewayReady:
                 type: boolean
               hyperregistryOidcReady:
+                type: boolean
+              infrastructureReady:
+                type: boolean
+              k8sReady:
+                type: boolean
+              kubeconfigReady:
                 type: boolean
               masterRun:
                 type: integer

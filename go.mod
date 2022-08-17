@@ -13,6 +13,7 @@ require (
 	k8s.io/api v0.22.2
 	k8s.io/apimachinery v0.22.2
 	k8s.io/client-go v0.22.2
+	k8s.io/kubernetes v1.22.2 // indirect
 	sigs.k8s.io/cluster-api v0.4.4
 	sigs.k8s.io/controller-runtime v0.10.1
 	sigs.k8s.io/yaml v1.2.0
