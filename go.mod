@@ -10,7 +10,7 @@ require (
 	github.com/onsi/ginkgo v1.16.4
 	github.com/onsi/gomega v1.15.0
 	github.com/traefik/traefik/v2 v2.5.4
-	k8s.io/api v0.22.2
+	k8s.io/api v0.24.4
 	k8s.io/apimachinery v0.22.2
 	k8s.io/client-go v0.22.2
 	k8s.io/kubernetes v1.22.2 // indirect

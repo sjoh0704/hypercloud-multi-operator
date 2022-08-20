@@ -48,9 +48,9 @@ import (
 )
 
 func (r *ClusterManagerReconciler) UpdateClusterManagerStatus(ctx context.Context, clusterManager *clusterV1alpha1.ClusterManager) (ctrl.Result, error) {
-	if clusterManager.Status.ControlPlaneReady {
-		return ctrl.Result{}, nil
-	}
+	// if clusterManager.Status.ControlPlaneReady {
+	// 	return ctrl.Result{}, nil
+	// }
 	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
 	log.Info("Start to reconcile phase for UpdateClusterManagerStatus")
 
@@ -150,7 +150,7 @@ func (r *ClusterManagerReconciler) UpdateClusterManagerStatus(ctx context.Contex
 		return ctrl.Result{}, err
 	}
 	if string(resp) == "ok" {
-		clusterManager.Status.ControlPlaneReady = true
+		// clusterManager.Status.ControlPlaneReady = true
 		clusterManager.Status.Ready = true
 	} else {
 		log.Info("Remote cluster is not ready... wait...")
@@ -164,7 +164,7 @@ func (r *ClusterManagerReconciler) UpdateClusterManagerStatus(ctx context.Contex
 }
 
 func (r *ClusterManagerReconciler) ProvisioningCluster(ctx context.Context, clusterManager *clusterV1alpha1.ClusterManager) (ctrl.Result, error) {
-	if clusterManager.Annotations[clusterV1alpha1.AnnotationKeyClmSuffix] == "" {
+	if clusterManager.Status.InfrastructureReady {
 		return ctrl.Result{}, nil
 	}
 
@@ -397,7 +397,10 @@ func (r *ClusterManagerReconciler) machineDeploymentUpdate(ctx context.Context, 
 }
 
 func (r *ClusterManagerReconciler) CreateTraefikResources(ctx context.Context, clusterManager *clusterV1alpha1.ClusterManager) (ctrl.Result, error) {
-	if !clusterManager.Status.ControlPlaneReady || !clusterManager.Status.Ready || clusterManager.Status.TraefikReady {
+	// if !clusterManager.Status.ControlPlaneReady || !clusterManager.Status.Ready || clusterManager.Status.TraefikReady {
+	// 	return ctrl.Result{}, nil
+	// }
+	if !clusterManager.Status.Ready || clusterManager.Status.TraefikReady {
 		return ctrl.Result{}, nil
 	}
 	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())

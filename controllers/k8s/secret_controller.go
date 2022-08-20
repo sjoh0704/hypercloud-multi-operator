@@ -465,11 +465,11 @@ func (r *SecretReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		&handler.EnqueueRequestForObject{},
 		predicate.Funcs{
 			UpdateFunc: func(e event.UpdateEvent) bool {
-				oldClm := e.ObjectOld.(*clusterV1alpha1.ClusterManager)
-				newClm := e.ObjectNew.(*clusterV1alpha1.ClusterManager)
-				if !oldClm.Status.ControlPlaneReady && newClm.Status.ControlPlaneReady {
-					return true
-				}
+				// oldClm := e.ObjectOld.(*clusterV1alpha1.ClusterManager)
+				// newClm := e.ObjectNew.(*clusterV1alpha1.ClusterManager)
+				// if !oldClm.Status.ControlPlaneReady && newClm.Status.ControlPlaneReady {
+				// 	return true
+				// }
 				return false
 			},
 			CreateFunc: func(e event.CreateEvent) bool {

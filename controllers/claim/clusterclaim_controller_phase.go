@@ -22,7 +22,7 @@ func (r *ClusterClaimReconciler) CreateClusterManager(ctx context.Context, cc *c
 	}
 
 	log := r.Log.WithValues("clusterclaim", cc.GetNamespacedName())
-	log.Info("Start to reconcile phase for CreateClusterManagerPhase")
+	log.Info("Start to reconcile phase for CreateClusterManager")
 
 	key := types.NamespacedName{
 		Name:      cc.Spec.ClusterName,
@@ -96,7 +96,7 @@ func (r *ClusterClaimReconciler) CreatePersistentVolumeClaim(ctx context.Context
 	storageClassName := ""
 
 	log := r.Log.WithValues("clusterclaim", cc.GetNamespacedName())
-	log.Info("Start to reconcile phase for CreatePersistentVolumeClaimPhase")
+	log.Info("Start to reconcile phase for CreatePersistentVolumeClaim")
 
 	key := types.NamespacedName{
 		Name:      cc.Spec.ClusterName,
@@ -152,13 +152,14 @@ func (r *ClusterClaimReconciler) CreatePersistentVolumeClaim(ctx context.Context
 
 	return ctrl.Result{}, nil
 }
+
 func (r *ClusterClaimReconciler) CreatePersistentVolume(ctx context.Context, cc *claimV1alpha1.ClusterClaim) (ctrl.Result, error) {
 	if cc.Status.Phase != "Approved" {
 		return ctrl.Result{}, nil
 	}
 
 	log := r.Log.WithValues("clusterclaim", cc.GetNamespacedName())
-	log.Info("Start to reconcile phase for CreatePersistentVolumePhase")
+	log.Info("Start to reconcile phase for CreatePersistentVolume")
 
 	key := types.NamespacedName{
 		Name:      cc.Spec.ClusterName,
