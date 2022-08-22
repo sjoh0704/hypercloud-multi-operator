@@ -4,7 +4,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.6.2
+    controller-gen.kubebuilder.io/version: v0.7.0
   creationTimestamp: null
   name: clusterclaims.claim.tmax.io
 spec:
@@ -63,12 +63,65 @@ spec:
               providerAwsSpec:
                 description: Provider Aws Spec
                 properties:
-                  masterType:
-                    description: 'The type of VM for master node. Example: m4.xlarge.
-                      see: https://aws.amazon.com/ec2/instance-types'
+                  additionalTags:
+                    additionalProperties:
+                      type: string
+                    description: The additional tag attached to aws resources
+                    type: object
+                  bastion:
+                    description: The info of bastion instance
+                    properties:
+                      diskSize:
+                        description: The disk size of the instance
+                        type: integer
+                      num:
+                        description: The number of instance
+                        type: integer
+                      type:
+                        description: Indicates the size of the instance
+                        type: string
+                    type: object
+                  hostOs:
+                    description: The type of OS that instances(master, worker, bastion)
+                      use
+                    enum:
+                    - rhel
+                    - ubuntu
                     type: string
+                  master:
+                    description: The info of master instance
+                    properties:
+                      diskSize:
+                        description: The disk size of the instance
+                        type: integer
+                      num:
+                        description: The number of instance
+                        type: integer
+                      type:
+                        description: Indicates the size of the instance
+                        type: string
+                    type: object
+                  networkSpec:
+                    description: The network spec that cluster uses
+                    properties:
+                      privateSubnetCidrBlock:
+                        description: The size of private subnet belonging to vpc cidr
+                        items:
+                          type: string
+                        type: array
+                      publicSubnetCidrBlock:
+                        description: The size of public subnet belonging to vpc cidr
+                        items:
+                          type: string
+                        type: array
+                      vpcCidrBlock:
+                        description: The size of the vpc to which the cluster will
+                          be deployed
+                        type: string
+                    type: object
                   region:
-                    description: The region where VM is working
+                    description: The ssh key info to access VM SshKey string `json:"sshKey,omitempty"`
+                      The region where VM is working
                     enum:
                     - ap-northeast-1
                     - ap-northeast-2
@@ -86,13 +139,19 @@ spec:
                     - us-west-1
                     - us-west-2
                     type: string
-                  sshKey:
-                    description: The ssh key info to access VM
-                    type: string
-                  workerType:
-                    description: 'The type of VM for master node. Example: m4.xlarge.
-                      see: https://aws.amazon.com/ec2/instance-types'
-                    type: string
+                  worker:
+                    description: The info of worker instance
+                    properties:
+                      diskSize:
+                        description: The disk size of the instance
+                        type: integer
+                      num:
+                        description: The number of instance
+                        type: integer
+                      type:
+                        description: Indicates the size of the instance
+                        type: string
+                    type: object
                 type: object
               providerVsphereSpec:
                 description: Provider vSphere Spec

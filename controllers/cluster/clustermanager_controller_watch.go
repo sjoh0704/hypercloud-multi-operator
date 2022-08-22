@@ -16,19 +16,115 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	clusterV1alpha1 "github.com/tmax-cloud/hypercloud-multi-operator/apis/cluster/v1alpha1"
+	"github.com/tmax-cloud/hypercloud-multi-operator/controllers/util"
 
+	batchV1 "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-
 	capiV1alpha3 "sigs.k8s.io/cluster-api/api/v1alpha3"
 	controlplanev1 "sigs.k8s.io/cluster-api/controlplane/kubeadm/api/v1alpha3"
 	"sigs.k8s.io/cluster-api/util/patch"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+func (r *ClusterManagerReconciler) requeueClusterManagersForJob(o client.Object) []ctrl.Request {
+	job := o.DeepCopyObject().(*batchV1.Job)
+
+	if job.Status.Failed == 0 && job.Status.Succeeded == 0 {
+		return nil
+	}
+
+	log := r.Log.WithValues("objectMapper", "clusterToClusterManager", "namespace", job.Namespace, job.Kind, job.Name)
+	log.Info("Start to requeueClusterManagersForJob mapping...")
+
+	clm := &clusterV1alpha1.ClusterManager{}
+
+	key := types.NamespacedName{
+		Name:      job.Labels[clusterV1alpha1.LabelKeyClmName],
+		Namespace: job.Labels[clusterV1alpha1.LabelKeyClmNamespace],
+	}
+
+	err := r.Get(context.TODO(), key, clm)
+	if errors.IsNotFound(err) {
+		log.Error(err, "Cannot find cluster manager")
+		return nil
+	} else if err != nil {
+		log.Error(err, "Failed to get cluster manager")
+		return nil
+	}
+
+	helper, _ := patch.NewHelper(clm, r.Client)
+	defer func() {
+		if err := helper.Patch(context.TODO(), clm); err != nil {
+			log.Error(err, "ClusterManager patch error")
+		}
+	}()
+
+	if job.Status.Failed == 1 {
+		err := ""
+		if util.HasJobCondition(job.Status.Conditions, batchV1.JobSuspended) {
+			condition := util.GetJobCondition(job.Status.Conditions, batchV1.JobSuspended)
+			err += condition.Message
+		}
+		if util.HasJobCondition(job.Status.Conditions, batchV1.JobFailed) {
+			condition := util.GetJobCondition(job.Status.Conditions, batchV1.JobFailed)
+			err += condition.Message
+		}
+
+		if job.Annotations[clusterV1alpha1.AnnotationKeyJobType] == clusterV1alpha1.ProvisioningInfrastrucutre {
+			clm.Status.InfrastructureReady = false
+			log.Error(fmt.Errorf(err), "Failed to provision infrastructure")
+
+		} else if job.Annotations[clusterV1alpha1.AnnotationKeyJobType] == clusterV1alpha1.InstallingK8s {
+			clm.Status.K8sReady = false
+			log.Error(fmt.Errorf(err), "Failed to install k8s")
+
+		} else if job.Annotations[clusterV1alpha1.AnnotationKeyJobType] == clusterV1alpha1.CreatingKubeconfig {
+			clm.Status.KubeconfigReady = false
+			log.Error(fmt.Errorf(err), "Failed to create kubeconfig")
+		} else {
+			return nil
+		}
+
+		clm.Status.FailureReason = err
+
+		return []ctrl.Request{
+			{
+				NamespacedName: clm.GetNamespacedName(),
+			},
+		}
+
+	} else if job.Status.Succeeded == 1 {
+
+		if job.Annotations[clusterV1alpha1.AnnotationKeyJobType] == clusterV1alpha1.ProvisioningInfrastrucutre {
+			clm.Status.InfrastructureReady = true
+			log.Info("Created infrastructure")
+
+		} else if job.Annotations[clusterV1alpha1.AnnotationKeyJobType] == clusterV1alpha1.InstallingK8s {
+			clm.Status.K8sReady = true
+			log.Info("Installed k8s")
+
+		} else if job.Annotations[clusterV1alpha1.AnnotationKeyJobType] == clusterV1alpha1.CreatingKubeconfig {
+			clm.Status.KubeconfigReady = true
+			log.Info("Created kubeconfig")
+		} else {
+			return nil
+		}
+		clm.Status.FailureReason = ""
+
+		return []ctrl.Request{
+			{
+				NamespacedName: clm.GetNamespacedName(),
+			},
+		}
+	}
+	return nil
+}
 
 func (r *ClusterManagerReconciler) requeueClusterManagersForCluster(o client.Object) []ctrl.Request {
 	c := o.DeepCopyObject().(*capiV1alpha3.Cluster)
@@ -57,7 +153,7 @@ func (r *ClusterManagerReconciler) requeueClusterManagersForCluster(o client.Obj
 		}
 	}()
 	// clm.Status.SetTypedPhase(clusterV1alpha1.ClusterManagerPhaseProvisioned)
-	clm.Status.ControlPlaneReady = c.Status.ControlPlaneInitialized
+	// clm.Status.ControlPlaneReady = c.Status.ControlPlaneInitialized
 
 	return nil
 }

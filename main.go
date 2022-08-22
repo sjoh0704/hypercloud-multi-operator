@@ -24,11 +24,12 @@ import (
 	servicecatalogv1beta1 "github.com/kubernetes-sigs/service-catalog/pkg/apis/servicecatalog/v1beta1"
 	claimV1alpha1 "github.com/tmax-cloud/hypercloud-multi-operator/apis/claim/v1alpha1"
 	clusterV1alpha1 "github.com/tmax-cloud/hypercloud-multi-operator/apis/cluster/v1alpha1"
-	claimController "github.com/tmax-cloud/hypercloud-multi-operator/controllers/claim"
+	claimcontroller "github.com/tmax-cloud/hypercloud-multi-operator/controllers/claim"
 	clusterController "github.com/tmax-cloud/hypercloud-multi-operator/controllers/cluster"
 	k8scontroller "github.com/tmax-cloud/hypercloud-multi-operator/controllers/k8s"
 	traefikV1alpha1 "github.com/traefik/traefik/v2/pkg/provider/kubernetes/crd/traefik/v1alpha1"
-
+	batchV1 "k8s.io/api/batch/v1"
+	coreV1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -54,7 +55,10 @@ func init() {
 	utilruntime.Must(servicecatalogv1beta1.AddToScheme(scheme))
 	utilruntime.Must(certmanagerV1.AddToScheme((scheme)))
 	utilruntime.Must(traefikV1alpha1.AddToScheme(scheme))
+	utilruntime.Must(batchV1.AddToScheme(scheme))
+	utilruntime.Must(coreV1.AddToScheme(scheme))
 	utilruntime.Must(argocdV1alpha1.AddToScheme(scheme))
+
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -86,7 +90,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&claimController.ClusterClaimReconciler{
+	if err = (&claimcontroller.ClusterClaimReconciler{
 		Client: mgr.GetClient(),
 		Log:    ctrl.Log.WithName("controllers").WithName("ClusterClaim"),
 		Scheme: mgr.GetScheme(),
