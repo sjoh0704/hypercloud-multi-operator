@@ -21,11 +21,12 @@ import (
 	"github.com/go-logr/logr"
 	claimV1alpha1 "github.com/tmax-cloud/hypercloud-multi-operator/apis/claim/v1alpha1"
 	clusterV1alpha1 "github.com/tmax-cloud/hypercloud-multi-operator/apis/cluster/v1alpha1"
+	"github.com/tmax-cloud/hypercloud-multi-operator/controllers/util"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 
+	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -58,6 +59,8 @@ type ClusterClaimReconciler struct {
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=cluster.tmax.io,resources=clustermanagers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=cluster.tmax.io,resources=clustermanagers/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=persistentvolumes,verbs=get;list;watch;create;update;patch;delete
 
 // cluster claim 이 생성되면, reconcile 함수는 해당 cluster claim 의 status 를 awaiting 으로 변경해준다.
 // 해당 claim 으로 생성한 cluster 에 대한 cluster manager 의 생성은 hypercloud-api-server 에서 진행된다.
@@ -90,50 +93,41 @@ func (r *ClusterClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 	}
 
-	// console로부터 approved로 변경시 clustermanager 생성
-	if clusterClaim.Status.Phase == claimV1alpha1.ClusterClaimPhaseApproved {
-		if err := r.CreateClusterManager(context.TODO(), clusterClaim); err != nil {
-			log.Error(err, "Failed to Create ClusterManager")
-			return ctrl.Result{RequeueAfter: requeueAfter10Second}, nil
-		}
-		return ctrl.Result{}, nil
-	}
-
-	return ctrl.Result{}, nil
+	return r.reconcile(context.TODO(), clusterClaim)
 }
 
-func (r *ClusterClaimReconciler) requeueClusterClaimsForClusterManager(o client.Object) []ctrl.Request {
-	clm := o.DeepCopyObject().(*clusterV1alpha1.ClusterManager)
-	log := r.Log.WithValues("objectMapper", "clusterManagerToClusterClaim", "clusterManager", clm.Name)
-	log.Info("Start to clusterManagerToClusterClaim mapping...")
+// reconcile handles cluster reconciliation.
+func (r *ClusterClaimReconciler) reconcile(ctx context.Context, clusterClaim *claimV1alpha1.ClusterClaim) (ctrl.Result, error) {
+	phases := []func(context.Context, *claimV1alpha1.ClusterClaim) (ctrl.Result, error){}
+	phases = append(
+		phases,
+		r.CreateClusterManager,
+		r.CreatePersistentVolumeClaim,
+	)
 
-	//get clusterManager
-	cc := &claimV1alpha1.ClusterClaim{}
-	key := types.NamespacedName{
-		Name:      clm.Labels[clusterV1alpha1.LabelKeyClcName],
-		Namespace: clm.Namespace,
-	}
-	if err := r.Get(context.TODO(), key, cc); errors.IsNotFound(err) {
-		log.Info("ClusterClaim resource not found. Ignoring since object must be deleted")
-		return nil
-	} else if err != nil {
-		log.Error(err, "Failed to get ClusterClaim")
-		return nil
+	res := ctrl.Result{}
+	errs := []error{}
+	// phases 를 돌면서, append 한 함수들을 순차적으로 수행하고,
+	// error가 있는지 체크하여 error가 있으면 무조건 requeue
+	// 이때는 가장 최초로 error가 발생한 phase의 requeue after time을 따라감
+	// 모든 error를 최종적으로 aggregate하여 반환할 수 있도록 리스트로 반환
+	// error는 없지만 다시 requeue 가 되어야 하는 phase들이 존재하는 경우
+	// LowestNonZeroResult 함수를 통해 requeueAfter time 이 가장 짧은 함수를 찾는다.
+	for _, phase := range phases {
+		// Call the inner reconciliation methods.
+		phaseResult, err := phase(ctx, clusterClaim)
+		if err != nil {
+			errs = append(errs, err)
+		}
+		if len(errs) > 0 {
+			continue
+		}
+
+		// Aggregate phases which requeued without err
+		res = util.LowestNonZeroResult(res, phaseResult)
 	}
 
-	if cc.Status.Phase != claimV1alpha1.ClusterClaimPhaseApproved {
-		log.Info("ClusterClaims for ClusterManager [" + cc.Spec.ClusterName + "] is already delete... Do not update cc status to delete ")
-		return nil
-	}
-
-	cc.Status.SetTypedPhase(claimV1alpha1.ClusterClaimPhaseClusterDeleted)
-	cc.Status.Reason = "cluster is deleted"
-	err := r.Status().Update(context.TODO(), cc)
-	if err != nil {
-		log.Error(err, "Failed to update ClusterClaim status")
-		return nil //??
-	}
-	return nil
+	return res, kerrors.NewAggregate(errs)
 }
 
 func (r *ClusterClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {

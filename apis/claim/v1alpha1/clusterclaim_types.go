@@ -16,6 +16,7 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -62,14 +63,41 @@ type ClusterClaimSpec struct {
 
 type AwsClaimSpec struct {
 	// The ssh key info to access VM
-	SshKey string `json:"sshKey,omitempty"`
+	// SshKey string `json:"sshKey,omitempty"`
 	// +kubebuilder:validation:Enum:=ap-northeast-1;ap-northeast-2;ap-south-1;ap-southeast-1;ap-northeast-2;ca-central-1;eu-central-1;eu-west-1;eu-west-2;eu-west-3;sa-east-1;us-east-1;us-east-2;us-west-1;us-west-2
 	// The region where VM is working
 	Region string `json:"region,omitempty"`
 	// The type of VM for master node. Example: m4.xlarge. see: https://aws.amazon.com/ec2/instance-types
-	MasterType string `json:"masterType,omitempty"`
+	// MasterType string `json:"masterType,omitempty"`
 	// The type of VM for master node. Example: m4.xlarge. see: https://aws.amazon.com/ec2/instance-types
-	WorkerType string `json:"workerType,omitempty"`
+	// WorkerType string `json:"workerType,omitempty"`
+
+	Bastion Instance `json:"bastion,omitempty"`
+
+	Master Instance `json:"master,omitempty"`
+
+	Worker Instance `json:"worker,omitempty"`
+
+	HostOS string `json:"hostOs,omitempty"`
+
+	NetworkSpec NetworkSpec `json:"networkSpec,omitempty"`
+
+	AdditionalTags map[string]string `json:"additionalTags,omitempty"`
+}
+
+type Instance struct {
+	// InstanceType
+	Type string `json:"type,omitempty"`
+	// InstanceNum
+	Num int `json:"num,omitempty"`
+	// InstanceDiskSize
+	DiskSize int `json:"diskSize,omitempty"`
+}
+
+type NetworkSpec struct {
+	VpcCidrBlock           string   `json:"vpcCidrBlock,omitempty"`
+	PrivateSubnetCidrBlock []string `json:"privateSubnetCidrBlock,omitempty"`
+	PublicSubnetCidrBlock  []string `json:"publicSubnetCidrBlock,omitempty"`
 }
 
 type VsphereClaimSpec struct {
@@ -143,4 +171,11 @@ type ClusterClaimList struct {
 
 func init() {
 	SchemeBuilder.Register(&ClusterClaim{}, &ClusterClaimList{})
+}
+
+func (cc *ClusterClaim) GetNamespacedName() types.NamespacedName {
+	return types.NamespacedName{
+		Name:      cc.Name,
+		Namespace: cc.Namespace,
+	}
 }

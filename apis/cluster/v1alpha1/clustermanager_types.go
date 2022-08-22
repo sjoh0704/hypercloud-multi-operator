@@ -17,7 +17,6 @@ package v1alpha1
 import (
 	"strings"
 
-	coreV1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -60,11 +59,31 @@ type ProviderAwsSpec struct {
 	// The region where VM is working
 	Region string `json:"region,omitempty"`
 	// The ssh key info to access VM
-	SshKey string `json:"sshKey,omitempty"`
-	// The type of VM for master node
-	MasterType string `json:"masterType,omitempty"`
-	// The type of VM for worker node
-	WorkerType string `json:"workerType,omitempty"`
+	Bastion Instance `json:"bastion,omitempty"`
+
+	Master Instance `json:"master,omitempty"`
+
+	Worker Instance `json:"worker,omitempty"`
+
+	HostOS string `json:"hostOs,omitempty"`
+
+	NetworkSpec NetworkSpec `json:"networkSpec,omitempty"`
+
+	AdditionalTags map[string]string `json:"additionalTags,omitempty"`
+}
+
+type Instance struct {
+	// InstanceType
+	Type string `json:"type,omitempty"`
+	// InstanceNum
+	Num int `json:"num,omitempty"`
+	// InstanceDiskSize
+	DiskSize int `json:"diskSize,omitempty"`
+}
+type NetworkSpec struct {
+	VpcCidrBlock           string   `json:"vpcCidrBlock,omitempty"`
+	PrivateSubnetCidrBlock []string `json:"privateSubnetCidrBlock,omitempty"`
+	PublicSubnetCidrBlock  []string `json:"publicSubnetCidrBlock,omitempty"`
 }
 
 // ProviderVsphereSpec defines
@@ -103,22 +122,24 @@ type ProviderVsphereSpec struct {
 
 // ClusterManagerStatus defines the observed state of ClusterManager
 type ClusterManagerStatus struct {
-	Provider               string                  `json:"provider,omitempty"`
-	Version                string                  `json:"version,omitempty"`
-	Ready                  bool                    `json:"ready,omitempty"`
-	ControlPlaneReady      bool                    `json:"controlPlaneReady,omitempty"`
-	MasterRun              int                     `json:"masterRun,omitempty"`
-	WorkerRun              int                     `json:"workerRun,omitempty"`
-	NodeInfo               []coreV1.NodeSystemInfo `json:"nodeInfo,omitempty"`
-	Phase                  ClusterManagerPhase     `json:"phase,omitempty"`
-	ControlPlaneEndpoint   string                  `json:"controlPlaneEndpoint,omitempty"`
-	ArgoReady              bool                    `json:"argoReady,omitempty"`
-	TraefikReady           bool                    `json:"traefikReady,omitempty"`
-	MonitoringReady        bool                    `json:"gatewayReady,omitempty"`
-	AuthClientReady        bool                    `json:"authClientReady,omitempty"`
-	HyperregistryOidcReady bool                    `json:"hyperregistryOidcReady,omitempty"`
-	OpenSearchReady        bool                    `json:"openSearchReady,omitempty"`
-	ApplicationLink        bool                    `json:"applicationLink,omitempty"`
+	Provider               string              `json:"provider,omitempty"`
+	Version                string              `json:"version,omitempty"`
+	Ready                  bool                `json:"ready,omitempty"`
+	MasterRun              int                 `json:"masterRun,omitempty"`
+	WorkerRun              int                 `json:"workerRun,omitempty"`
+	FailureReason          string              `json:"failureReason,omitempty"`
+	Phase                  ClusterManagerPhase `json:"phase,omitempty"`
+	ControlPlaneEndpoint   string              `json:"controlPlaneEndpoint,omitempty"`
+	ArgoReady              bool                `json:"argoReady,omitempty"`
+	TraefikReady           bool                `json:"traefikReady,omitempty"`
+	MonitoringReady        bool                `json:"gatewayReady,omitempty"`
+	AuthClientReady        bool                `json:"authClientReady,omitempty"`
+	HyperregistryOidcReady bool                `json:"hyperregistryOidcReady,omitempty"`
+	ApplicationLink        bool                `json:"applicationLink,omitempty"`
+	OpenSearchReady        bool                `json:"openSearchReady,omitempty"`
+	K8sReady               bool                `json:"k8sReady,omitempty"`
+	InfrastructureReady    bool                `json:"infrastructureReady,omitempty"`
+	KubeconfigReady        bool                `json:"kubeconfigReady,omitempty"`
 	// will be deprecated
 	PrometheusReady bool `json:"prometheusReady,omitempty"`
 }
@@ -135,6 +156,8 @@ const (
 	ClusterManagerPhaseReady = ClusterManagerPhase("Ready")
 	// 클러스터가 삭제중인 상태
 	ClusterManagerPhaseDeleting = ClusterManagerPhase("Deleting")
+	// 클러스터 생성에 실패한 상태
+	ClusterManagerPhaseFailed = ClusterManagerPhase("Failed")
 )
 
 const (
@@ -196,6 +219,17 @@ func (c *ClusterManagerStatus) SetTypedPhase(p ClusterManagerPhase) {
 	// c.Phase = string(p)
 	c.Phase = p
 }
+
+type JobType string
+
+const (
+	ProvisioningInfrastrucutre = "provisioning-infrastructure"
+	InstallingK8s              = "installing-k8s"
+	CreatingKubeconfig         = "creating-kubeconfig"
+	DestroyingInfrastructure   = "destroying-infrastructure"
+
+	AnnotationKeyJobType = "clustermanager.cluster.tmax.io/job-type"
+)
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status

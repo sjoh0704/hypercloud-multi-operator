@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	batchV1 "k8s.io/api/batch/v1"
 	coreV1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/kubernetes"
@@ -15,6 +16,34 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
+
+func GetJobCondition(conditions []batchV1.JobCondition, t batchV1.JobConditionType) *batchV1.JobCondition {
+
+	if conditions == nil {
+		return nil
+	}
+
+	for _, condition := range conditions {
+		if condition.Type == t {
+			return &condition
+		}
+	}
+	return nil
+}
+
+func HasJobCondition(conditions []batchV1.JobCondition, t batchV1.JobConditionType) bool {
+
+	if conditions == nil {
+		return false
+	}
+
+	for _, condition := range conditions {
+		if condition.Type == t {
+			return true
+		}
+	}
+	return false
+}
 
 // LowestNonZeroResult compares two reconciliation results
 // and returns the one with lowest requeue time.

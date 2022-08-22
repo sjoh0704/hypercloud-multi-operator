@@ -28,15 +28,497 @@ import (
 	util "github.com/tmax-cloud/hypercloud-multi-operator/controllers/util"
 	dynamicv2 "github.com/traefik/traefik/v2/pkg/config/dynamic"
 	traefikV1alpha1 "github.com/traefik/traefik/v2/pkg/provider/kubernetes/crd/traefik/v1alpha1"
-	ctrl "sigs.k8s.io/controller-runtime"
-
+	batchv1 "k8s.io/api/batch/v1"
 	coreV1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	ctrl "sigs.k8s.io/controller-runtime"
 )
+
+func (r *ClusterManagerReconciler) DeletePersistentVolumeClaim(clusterManager *clusterV1alpha1.ClusterManager) error {
+	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
+
+	key := types.NamespacedName{
+		Name:      fmt.Sprintf("%s-volume-claim", clusterManager.Name),
+		Namespace: clusterManager.Namespace,
+	}
+
+	pvc := &coreV1.PersistentVolumeClaim{}
+	if err := r.Get(context.TODO(), key, pvc); errors.IsNotFound(err) {
+		log.Info("Deleted persistent volume claim already")
+		return nil
+	} else if err != nil {
+		return err
+	}
+
+	if err := r.Delete(context.TODO(), pvc); err != nil {
+		return err
+	}
+	log.Info("Deleted persistent volume claim")
+	return nil
+}
+
+func (r *ClusterManagerReconciler) DeleteExistJobs(clusterManager *clusterV1alpha1.ClusterManager) error {
+	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
+	jobList := &batchv1.JobList{}
+	if err := r.List(context.TODO(), jobList); err != nil {
+		return err
+	}
+	for _, job := range jobList.Items {
+		if job.Labels[clusterV1alpha1.LabelKeyClmName] == clusterManager.Name && job.Labels[clusterV1alpha1.LabelKeyClmNamespace] == clusterManager.Namespace {
+			err := r.Delete(context.TODO(), &job)
+			if err != nil {
+				return fmt.Errorf("Failed to delete job")
+			}
+		}
+	}
+	log.Info("Deleted jobs that existed")
+	return nil
+}
+
+func CreateEnvFromClustermanagerSpec(clusterManager *clusterV1alpha1.ClusterManager) ([]coreV1.EnvVar, error) {
+	EnvList := []coreV1.EnvVar{}
+	AwsSpec := clusterManager.AwsSpec
+
+	// region
+	if AwsSpec.Region != "" {
+		EnvList = append(EnvList, coreV1.EnvVar{
+			Name:  "TF_VAR_AWS_DEFAULT_REGION",
+			Value: fmt.Sprintf("%s", AwsSpec.Region),
+		})
+	}
+	// cluster name, master num, worker num
+	EnvList = append(EnvList,
+		coreV1.EnvVar{
+			Name:  "TF_VAR_aws_cluster_name",
+			Value: fmt.Sprintf("%s", clusterManager.Name),
+		},
+		coreV1.EnvVar{
+			Name:  "TF_VAR_aws_kube_master_num",
+			Value: fmt.Sprintf("%d", clusterManager.Spec.MasterNum),
+		},
+		coreV1.EnvVar{
+			Name:  "TF_VAR_aws_kube_worker_num",
+			Value: fmt.Sprintf("%d", clusterManager.Spec.WorkerNum),
+		},
+	)
+	// region에 따른 host os 지정이 필요
+	if AwsSpec.HostOS == "ubuntu" {
+		EnvList = append(EnvList,
+			coreV1.EnvVar{
+				Name:  "TF_VAR_aws_ami_name",
+				Value: "[\"ami-ubuntu-18.04-1.13.0-00-1548773800\"]",
+			},
+			coreV1.EnvVar{
+				Name:  "TF_VAR_aws_ami_owner",
+				Value: "[\"258751437250\"]",
+			},
+			coreV1.EnvVar{
+				Name:  "USER",
+				Value: "ubuntu",
+			},
+			coreV1.EnvVar{
+				Name:  "HOST_OS",
+				Value: "ubuntu",
+			},
+		)
+	} else if AwsSpec.HostOS == "rhel" {
+		EnvList = append(EnvList,
+			coreV1.EnvVar{
+				Name:  "TF_VAR_aws_ami_name",
+				Value: "[\"RHEL-8.2.0_HVM-20210907-x86_64-0-Hourly2-GP2\"]",
+			},
+			coreV1.EnvVar{
+				Name:  "TF_VAR_aws_ami_owner",
+				Value: "[\"309956199498\"]",
+			},
+			coreV1.EnvVar{
+				Name:  "USER",
+				Value: "ec2-user",
+			},
+			coreV1.EnvVar{
+				Name:  "HOST_OS",
+				Value: "rhel",
+			},
+		)
+	} else {
+		return nil, fmt.Errorf("not support host os: %s", AwsSpec.HostOS)
+	}
+	// bastion // default 1
+	if AwsSpec.Bastion.Num > 0 {
+		EnvList = append(EnvList, coreV1.EnvVar{
+			Name:  "TF_VAR_aws_bastion_num",
+			Value: fmt.Sprintf("%d", AwsSpec.Bastion.Num),
+		})
+	}
+
+	if AwsSpec.Bastion.Type != "" {
+		EnvList = append(EnvList, coreV1.EnvVar{
+			Name:  "TF_VAR_aws_bastion_size",
+			Value: fmt.Sprintf("%s", AwsSpec.Bastion.Type),
+		})
+	}
+
+	// master
+	if AwsSpec.Master.Type != "" {
+		EnvList = append(EnvList, coreV1.EnvVar{
+			Name:  "TF_VAR_aws_kube_master_size",
+			Value: fmt.Sprintf("%s", AwsSpec.Master.Type),
+		})
+	}
+
+	if AwsSpec.Master.DiskSize != 0 {
+		EnvList = append(EnvList, coreV1.EnvVar{
+			Name:  "TF_VAR_aws_kube_master_disk_size",
+			Value: fmt.Sprintf("%d", AwsSpec.Master.DiskSize),
+		})
+	}
+
+	// worker
+	if AwsSpec.Worker.Type != "" {
+		EnvList = append(EnvList, coreV1.EnvVar{
+			Name:  "TF_VAR_aws_kube_worker_size",
+			Value: fmt.Sprintf("%s", AwsSpec.Worker.Type),
+		})
+	}
+
+	if AwsSpec.Worker.DiskSize != 0 {
+		EnvList = append(EnvList, coreV1.EnvVar{
+			Name:  "TF_VAR_aws_kube_worker_disk_size",
+			Value: fmt.Sprintf("%d", AwsSpec.Worker.DiskSize),
+		})
+	}
+
+	if AwsSpec.NetworkSpec.VpcCidrBlock != "" {
+		if len(AwsSpec.NetworkSpec.PrivateSubnetCidrBlock) != len(AwsSpec.NetworkSpec.PublicSubnetCidrBlock) {
+			return nil, fmt.Errorf("PrivateSubnetCidrBlock and PublicSubnetCidrBlock must have same length of list")
+		}
+
+		publicCidr := ""
+		for _, cidr := range AwsSpec.NetworkSpec.PublicSubnetCidrBlock {
+			publicCidr += fmt.Sprintf("\"%s\", ", cidr)
+		}
+
+		privateCidr := ""
+		for _, cidr := range AwsSpec.NetworkSpec.PrivateSubnetCidrBlock {
+			privateCidr += fmt.Sprintf("\"%s\", ", cidr)
+		}
+
+		EnvList = append(EnvList,
+			coreV1.EnvVar{
+				Name:  "TF_VAR_aws_vpc_cidr_block",
+				Value: fmt.Sprintf("%s", AwsSpec.NetworkSpec.VpcCidrBlock),
+			},
+			coreV1.EnvVar{
+				Name:  "TF_VAR_aws_cidr_subnets_public",
+				Value: fmt.Sprintf("[%s]", publicCidr[:len(publicCidr)-2]),
+			},
+			coreV1.EnvVar{
+				Name:  "TF_VAR_aws_cidr_subnets_private",
+				Value: fmt.Sprintf("[%s]", privateCidr[:len(privateCidr)-2]),
+			})
+	}
+
+	// additional tags
+	if len(AwsSpec.AdditionalTags) > 0 {
+		addtionalTags := ""
+		for key, value := range AwsSpec.AdditionalTags {
+			addtionalTags += fmt.Sprintf("%s=\"%s\", ", key, value)
+		}
+		EnvList = append(EnvList,
+			coreV1.EnvVar{
+				Name:  "TF_VAR_default_tags",
+				Value: fmt.Sprintf("{ %s }", addtionalTags[:len(addtionalTags)-2]),
+			})
+	}
+
+	return EnvList, nil
+}
+func (r *ClusterManagerReconciler) DestroyInfrastrucutreJob(clusterManager *clusterV1alpha1.ClusterManager) (*batchv1.Job, error) {
+	var backoffLimit int32 = 0
+	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
+	envList, err := CreateEnvFromClustermanagerSpec(clusterManager)
+	if err != nil {
+		log.Error(err, "Failed to create envList from cluster manager spec")
+	}
+
+	destroyInfrastrucutreJob := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-destroy-infra", clusterManager.Name),
+			Namespace: clusterManager.Namespace,
+			Annotations: map[string]string{
+				clusterV1alpha1.AnnotationKeyJobType: clusterV1alpha1.DestroyingInfrastructure,
+			},
+			Labels: map[string]string{
+				clusterV1alpha1.LabelKeyClmName:      clusterManager.Name,
+				clusterV1alpha1.LabelKeyClmNamespace: clusterManager.Namespace,
+			},
+		},
+		Spec: batchv1.JobSpec{
+			Template: coreV1.PodTemplateSpec{
+				Spec: coreV1.PodSpec{
+					Containers: []coreV1.Container{
+						{
+							Name:    "destroy-infrastructure",
+							Image:   "kubespray:test",
+							Command: []string{"/bin/sh", "-c"},
+							Args:    []string{"./destroy.sh 2> /dev/termination-log;"},
+							Env:     envList,
+							EnvFrom: []coreV1.EnvFromSource{
+								{
+									ConfigMapRef: &coreV1.ConfigMapEnvSource{
+										LocalObjectReference: coreV1.LocalObjectReference{
+											Name: "terraform-default",
+										},
+									},
+								},
+								{
+									SecretRef: &coreV1.SecretEnvSource{
+										LocalObjectReference: coreV1.LocalObjectReference{
+											Name: "terraform-aws-credentials",
+										},
+									},
+								},
+							},
+							VolumeMounts: []coreV1.VolumeMount{
+								{
+									Name:      "kubespray-context",
+									MountPath: "/context",
+								},
+							},
+						},
+					},
+					Volumes: []coreV1.Volume{
+						{
+							Name: "kubespray-context",
+							VolumeSource: coreV1.VolumeSource{
+								PersistentVolumeClaim: &coreV1.PersistentVolumeClaimVolumeSource{
+									ClaimName: "kubespray-pvc",
+								},
+							},
+						},
+					},
+					RestartPolicy: coreV1.RestartPolicyNever,
+				},
+			},
+			BackoffLimit: &backoffLimit,
+		},
+	}
+	return destroyInfrastrucutreJob, nil
+}
+
+func (r *ClusterManagerReconciler) CreateKubeconfigJob(clusterManager *clusterV1alpha1.ClusterManager) (*batchv1.Job, error) {
+	var backoffLimit int32 = 0
+	var serviceAutoMount bool = true
+
+	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
+	envList, err := CreateEnvFromClustermanagerSpec(clusterManager)
+	if err != nil {
+		log.Error(err, "Failed to create envList from cluster manager spec")
+	}
+
+	installK8sJob := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-create-kubeconfig", clusterManager.Name),
+			Namespace: clusterManager.Namespace,
+			Annotations: map[string]string{
+				clusterV1alpha1.AnnotationKeyJobType: clusterV1alpha1.CreatingKubeconfig,
+			},
+			Labels: map[string]string{
+				clusterV1alpha1.LabelKeyClmName:      clusterManager.Name,
+				clusterV1alpha1.LabelKeyClmNamespace: clusterManager.Namespace,
+			},
+		},
+		Spec: batchv1.JobSpec{
+			Template: coreV1.PodTemplateSpec{
+				Spec: coreV1.PodSpec{
+					ServiceAccountName:           "kubectl",
+					AutomountServiceAccountToken: &serviceAutoMount,
+					Containers: []coreV1.Container{
+						{
+							Name:    "create-kubeconfig",
+							Image:   "bitnami/kubectl:latest",
+							Command: []string{"/bin/sh", "-c"},
+							Args:    []string{fmt.Sprintf("kubectl -n %s create secret generic %s-%s --from-file=value=/context/admin.conf 2> /dev/termination-log;", clusterManager.Namespace, clusterManager.Name, util.KubeconfigSuffix)},
+							Env:     envList,
+							VolumeMounts: []coreV1.VolumeMount{
+								{
+									Name:      "kubespray-context",
+									MountPath: "/context",
+								},
+							},
+						},
+					},
+					Volumes: []coreV1.Volume{
+						{
+							Name: "kubespray-context",
+							VolumeSource: coreV1.VolumeSource{
+								PersistentVolumeClaim: &coreV1.PersistentVolumeClaimVolumeSource{
+									ClaimName: "kubespray-pvc",
+								},
+							},
+						},
+					},
+					RestartPolicy: coreV1.RestartPolicyNever,
+				},
+			},
+			BackoffLimit: &backoffLimit,
+		},
+	}
+
+	return installK8sJob, nil
+}
+
+func (r *ClusterManagerReconciler) InstallK8sJob(clusterManager *clusterV1alpha1.ClusterManager) (*batchv1.Job, error) {
+	var backoffLimit int32 = 0
+	var privateKeyDefaultValue int32 = 320
+
+	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
+	envList, err := CreateEnvFromClustermanagerSpec(clusterManager)
+	if err != nil {
+		log.Error(err, "Failed to create envList from cluster manager spec")
+	}
+
+	installK8sJob := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-install-k8s", clusterManager.Name),
+			Namespace: clusterManager.Namespace,
+			Annotations: map[string]string{
+				clusterV1alpha1.AnnotationKeyJobType: clusterV1alpha1.InstallingK8s,
+			},
+			Labels: map[string]string{
+				clusterV1alpha1.LabelKeyClmName:      clusterManager.Name,
+				clusterV1alpha1.LabelKeyClmNamespace: clusterManager.Namespace,
+			},
+		},
+		Spec: batchv1.JobSpec{
+			Template: coreV1.PodTemplateSpec{
+				Spec: coreV1.PodSpec{
+					Containers: []coreV1.Container{
+						{
+							Name:    "install-k8s",
+							Image:   "kubespray:test",
+							Command: []string{"/bin/sh", "-c"},
+							Args:    []string{"./install.sh 2> /dev/termination-log;"},
+							Env:     envList,
+							VolumeMounts: []coreV1.VolumeMount{
+								{
+									Name:      "kubespray-context",
+									MountPath: "/context",
+								},
+								{
+									Name:      "aws-private-key",
+									MountPath: "/kubespray/key.pem",
+									SubPath:   "key.pem",
+								},
+							},
+						},
+					},
+					Volumes: []coreV1.Volume{
+						{
+							Name: "kubespray-context",
+							VolumeSource: coreV1.VolumeSource{
+								PersistentVolumeClaim: &coreV1.PersistentVolumeClaimVolumeSource{
+									ClaimName: "kubespray-pvc",
+								},
+							},
+						},
+						{
+							Name: "aws-private-key",
+							VolumeSource: coreV1.VolumeSource{
+								Secret: &coreV1.SecretVolumeSource{
+									SecretName:  "aws-private-key",
+									DefaultMode: &privateKeyDefaultValue,
+								},
+							},
+						},
+					},
+					RestartPolicy: coreV1.RestartPolicyNever,
+				},
+			},
+			BackoffLimit: &backoffLimit,
+		},
+	}
+
+	return installK8sJob, nil
+}
+
+func (r *ClusterManagerReconciler) ProvisioningInfrastrucutreJob(clusterManager *clusterV1alpha1.ClusterManager) (*batchv1.Job, error) {
+	var backoffLimit int32 = 0
+	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
+	envList, err := CreateEnvFromClustermanagerSpec(clusterManager)
+	if err != nil {
+		log.Error(err, "Failed to create envList from cluster manager spec")
+	}
+
+	provisioningInfrastrucutreJob := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-provision-infra", clusterManager.Name),
+			Namespace: clusterManager.Namespace,
+			Annotations: map[string]string{
+				clusterV1alpha1.AnnotationKeyJobType: clusterV1alpha1.ProvisioningInfrastrucutre,
+			},
+			Labels: map[string]string{
+				clusterV1alpha1.LabelKeyClmName:      clusterManager.Name,
+				clusterV1alpha1.LabelKeyClmNamespace: clusterManager.Namespace,
+			},
+		},
+		Spec: batchv1.JobSpec{
+			Template: coreV1.PodTemplateSpec{
+				Spec: coreV1.PodSpec{
+					Containers: []coreV1.Container{
+						{
+							Name:    "provisioning-infrastructure",
+							Image:   "kubespray:test",
+							Command: []string{"/bin/sh", "-c"},
+							Args:    []string{"./provision.sh 2> /dev/termination-log;"},
+							Env:     envList,
+							EnvFrom: []coreV1.EnvFromSource{
+								{
+									ConfigMapRef: &coreV1.ConfigMapEnvSource{
+										LocalObjectReference: coreV1.LocalObjectReference{
+											Name: "terraform-default",
+										},
+									},
+								},
+								{
+									SecretRef: &coreV1.SecretEnvSource{
+										LocalObjectReference: coreV1.LocalObjectReference{
+											Name: "terraform-aws-credentials",
+										},
+									},
+								},
+							},
+							VolumeMounts: []coreV1.VolumeMount{
+								{
+									Name:      "kubespray-context",
+									MountPath: "/context",
+								},
+							},
+						},
+					},
+					Volumes: []coreV1.Volume{
+						{
+							Name: "kubespray-context",
+							VolumeSource: coreV1.VolumeSource{
+								PersistentVolumeClaim: &coreV1.PersistentVolumeClaimVolumeSource{
+									ClaimName: "kubespray-pvc",
+								},
+							},
+						},
+					},
+					RestartPolicy: coreV1.RestartPolicyNever,
+				},
+			},
+			BackoffLimit: &backoffLimit,
+		},
+	}
+
+	return provisioningInfrastrucutreJob, nil
+}
 
 func (r *ClusterManagerReconciler) GetKubeconfigSecret(clusterManager *clusterV1alpha1.ClusterManager) (*coreV1.Secret, error) {
 	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
