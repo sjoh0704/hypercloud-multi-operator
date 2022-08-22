@@ -38,8 +38,48 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-func CreateEnvFromClustermanagerSpec(clusterManager *clusterV1alpha1.ClusterManager) ([]coreV1.EnvVar, error) {
+func (r *ClusterManagerReconciler) DeletePersistentVolumeClaim(clusterManager *clusterV1alpha1.ClusterManager) error {
+	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
 
+	key := types.NamespacedName{
+		Name:      fmt.Sprintf("%s-volume-claim", clusterManager.Name),
+		Namespace: clusterManager.Namespace,
+	}
+
+	pvc := &coreV1.PersistentVolumeClaim{}
+	if err := r.Get(context.TODO(), key, pvc); errors.IsNotFound(err) {
+		log.Info("Deleted persistent volume claim already")
+		return nil
+	} else if err != nil {
+		return err
+	}
+
+	if err := r.Delete(context.TODO(), pvc); err != nil {
+		return err
+	}
+	log.Info("Deleted persistent volume claim")
+	return nil
+}
+
+func (r *ClusterManagerReconciler) DeleteExistJobs(clusterManager *clusterV1alpha1.ClusterManager) error {
+	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
+	jobList := &batchv1.JobList{}
+	if err := r.List(context.TODO(), jobList); err != nil {
+		return err
+	}
+	for _, job := range jobList.Items {
+		if job.Labels[clusterV1alpha1.LabelKeyClmName] == clusterManager.Name && job.Labels[clusterV1alpha1.LabelKeyClmNamespace] == clusterManager.Namespace {
+			err := r.Delete(context.TODO(), &job)
+			if err != nil {
+				return fmt.Errorf("Failed to delete job")
+			}
+		}
+	}
+	log.Info("Deleted jobs that existed")
+	return nil
+}
+
+func CreateEnvFromClustermanagerSpec(clusterManager *clusterV1alpha1.ClusterManager) ([]coreV1.EnvVar, error) {
 	EnvList := []coreV1.EnvVar{}
 	AwsSpec := clusterManager.AwsSpec
 
@@ -50,7 +90,6 @@ func CreateEnvFromClustermanagerSpec(clusterManager *clusterV1alpha1.ClusterMana
 			Value: fmt.Sprintf("%s", AwsSpec.Region),
 		})
 	}
-
 	// cluster name, master num, worker num
 	EnvList = append(EnvList,
 		coreV1.EnvVar{
@@ -66,7 +105,6 @@ func CreateEnvFromClustermanagerSpec(clusterManager *clusterV1alpha1.ClusterMana
 			Value: fmt.Sprintf("%d", clusterManager.Spec.WorkerNum),
 		},
 	)
-
 	// region에 따른 host os 지정이 필요
 	if AwsSpec.HostOS == "ubuntu" {
 		EnvList = append(EnvList,
@@ -87,7 +125,6 @@ func CreateEnvFromClustermanagerSpec(clusterManager *clusterV1alpha1.ClusterMana
 				Value: "ubuntu",
 			},
 		)
-
 	} else if AwsSpec.HostOS == "rhel" {
 		EnvList = append(EnvList,
 			coreV1.EnvVar{
@@ -110,7 +147,6 @@ func CreateEnvFromClustermanagerSpec(clusterManager *clusterV1alpha1.ClusterMana
 	} else {
 		return nil, fmt.Errorf("not support host os: %s", AwsSpec.HostOS)
 	}
-
 	// bastion // default 1
 	if AwsSpec.Bastion.Num > 0 {
 		EnvList = append(EnvList, coreV1.EnvVar{
@@ -201,6 +237,78 @@ func CreateEnvFromClustermanagerSpec(clusterManager *clusterV1alpha1.ClusterMana
 
 	return EnvList, nil
 }
+func (r *ClusterManagerReconciler) DestroyInfrastrucutreJob(clusterManager *clusterV1alpha1.ClusterManager) (*batchv1.Job, error) {
+	var backoffLimit int32 = 0
+	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
+	envList, err := CreateEnvFromClustermanagerSpec(clusterManager)
+	if err != nil {
+		log.Error(err, "Failed to create envList from cluster manager spec")
+	}
+
+	destroyInfrastrucutreJob := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-destroy-infra", clusterManager.Name),
+			Namespace: clusterManager.Namespace,
+			Annotations: map[string]string{
+				clusterV1alpha1.AnnotationKeyJobType: clusterV1alpha1.DestroyingInfrastructure,
+			},
+			Labels: map[string]string{
+				clusterV1alpha1.LabelKeyClmName:      clusterManager.Name,
+				clusterV1alpha1.LabelKeyClmNamespace: clusterManager.Namespace,
+			},
+		},
+		Spec: batchv1.JobSpec{
+			Template: coreV1.PodTemplateSpec{
+				Spec: coreV1.PodSpec{
+					Containers: []coreV1.Container{
+						{
+							Name:    "destroy-infrastructure",
+							Image:   "kubespray:test",
+							Command: []string{"/bin/sh", "-c"},
+							Args:    []string{"./destroy.sh 2> /dev/termination-log;"},
+							Env:     envList,
+							EnvFrom: []coreV1.EnvFromSource{
+								{
+									ConfigMapRef: &coreV1.ConfigMapEnvSource{
+										LocalObjectReference: coreV1.LocalObjectReference{
+											Name: "terraform-default",
+										},
+									},
+								},
+								{
+									SecretRef: &coreV1.SecretEnvSource{
+										LocalObjectReference: coreV1.LocalObjectReference{
+											Name: "terraform-aws-credentials",
+										},
+									},
+								},
+							},
+							VolumeMounts: []coreV1.VolumeMount{
+								{
+									Name:      "kubespray-context",
+									MountPath: "/context",
+								},
+							},
+						},
+					},
+					Volumes: []coreV1.Volume{
+						{
+							Name: "kubespray-context",
+							VolumeSource: coreV1.VolumeSource{
+								PersistentVolumeClaim: &coreV1.PersistentVolumeClaimVolumeSource{
+									ClaimName: "kubespray-pvc",
+								},
+							},
+						},
+					},
+					RestartPolicy: coreV1.RestartPolicyNever,
+				},
+			},
+			BackoffLimit: &backoffLimit,
+		},
+	}
+	return destroyInfrastrucutreJob, nil
+}
 
 func (r *ClusterManagerReconciler) CreateKubeconfigJob(clusterManager *clusterV1alpha1.ClusterManager) (*batchv1.Job, error) {
 	var backoffLimit int32 = 0
@@ -209,12 +317,12 @@ func (r *ClusterManagerReconciler) CreateKubeconfigJob(clusterManager *clusterV1
 	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
 	envList, err := CreateEnvFromClustermanagerSpec(clusterManager)
 	if err != nil {
-		log.Error(err, "Fail to create envList from cluster manager spec")
+		log.Error(err, "Failed to create envList from cluster manager spec")
 	}
 
 	installK8sJob := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-create-kubeconfig-%s", clusterManager.Name, clusterManager.Annotations[clusterV1alpha1.AnnotationKeyClmSuffix]),
+			Name:      fmt.Sprintf("%s-create-kubeconfig", clusterManager.Name),
 			Namespace: clusterManager.Namespace,
 			Annotations: map[string]string{
 				clusterV1alpha1.AnnotationKeyJobType: clusterV1alpha1.CreatingKubeconfig,
@@ -234,7 +342,7 @@ func (r *ClusterManagerReconciler) CreateKubeconfigJob(clusterManager *clusterV1
 							Name:    "create-kubeconfig",
 							Image:   "bitnami/kubectl:latest",
 							Command: []string{"/bin/sh", "-c"},
-							Args:    []string{fmt.Sprintf("kubectl create secret generic %s-%s-kubeconfig --from-file=value=/context/admin.conf 2> /dev/termination-log;", clusterManager.Namespace, clusterManager.Name)},
+							Args:    []string{fmt.Sprintf("kubectl -n %s create secret generic %s-%s --from-file=value=/context/admin.conf 2> /dev/termination-log;", clusterManager.Namespace, clusterManager.Name, util.KubeconfigSuffix)},
 							Env:     envList,
 							VolumeMounts: []coreV1.VolumeMount{
 								{
@@ -271,12 +379,12 @@ func (r *ClusterManagerReconciler) InstallK8sJob(clusterManager *clusterV1alpha1
 	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
 	envList, err := CreateEnvFromClustermanagerSpec(clusterManager)
 	if err != nil {
-		log.Error(err, "Fail to create envList from cluster manager spec")
+		log.Error(err, "Failed to create envList from cluster manager spec")
 	}
 
 	installK8sJob := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-install-k8s-%s", clusterManager.Name, clusterManager.Annotations[clusterV1alpha1.AnnotationKeyClmSuffix]),
+			Name:      fmt.Sprintf("%s-install-k8s", clusterManager.Name),
 			Namespace: clusterManager.Namespace,
 			Annotations: map[string]string{
 				clusterV1alpha1.AnnotationKeyJobType: clusterV1alpha1.InstallingK8s,
@@ -343,12 +451,12 @@ func (r *ClusterManagerReconciler) ProvisioningInfrastrucutreJob(clusterManager 
 	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
 	envList, err := CreateEnvFromClustermanagerSpec(clusterManager)
 	if err != nil {
-		log.Error(err, "Fail to create envList from cluster manager spec")
+		log.Error(err, "Failed to create envList from cluster manager spec")
 	}
 
 	provisioningInfrastrucutreJob := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-provision-infra-%s", clusterManager.Name, clusterManager.Annotations[clusterV1alpha1.AnnotationKeyClmSuffix]),
+			Name:      fmt.Sprintf("%s-provision-infra", clusterManager.Name),
 			Namespace: clusterManager.Namespace,
 			Annotations: map[string]string{
 				clusterV1alpha1.AnnotationKeyJobType: clusterV1alpha1.ProvisioningInfrastrucutre,

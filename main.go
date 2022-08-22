@@ -19,12 +19,13 @@ import (
 	"os"
 
 	// +kubebuilder:scaffold:imports
+	argocdV1alpha1 "github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
 	certmanagerV1 "github.com/jetstack/cert-manager/pkg/apis/certmanager/v1"
 	servicecatalogv1beta1 "github.com/kubernetes-sigs/service-catalog/pkg/apis/servicecatalog/v1beta1"
 	claimV1alpha1 "github.com/tmax-cloud/hypercloud-multi-operator/apis/claim/v1alpha1"
 	clusterV1alpha1 "github.com/tmax-cloud/hypercloud-multi-operator/apis/cluster/v1alpha1"
 	claimcontroller "github.com/tmax-cloud/hypercloud-multi-operator/controllers/claim"
-	clustercontroller "github.com/tmax-cloud/hypercloud-multi-operator/controllers/cluster"
+	clusterController "github.com/tmax-cloud/hypercloud-multi-operator/controllers/cluster"
 	k8scontroller "github.com/tmax-cloud/hypercloud-multi-operator/controllers/k8s"
 	traefikV1alpha1 "github.com/traefik/traefik/v2/pkg/provider/kubernetes/crd/traefik/v1alpha1"
 	batchV1 "k8s.io/api/batch/v1"
@@ -56,6 +57,7 @@ func init() {
 	utilruntime.Must(traefikV1alpha1.AddToScheme(scheme))
 	utilruntime.Must(batchV1.AddToScheme(scheme))
 	utilruntime.Must(coreV1.AddToScheme(scheme))
+	utilruntime.Must(argocdV1alpha1.AddToScheme(scheme))
 
 	// +kubebuilder:scaffold:scheme
 }
@@ -96,7 +98,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "ClusterClaim")
 		os.Exit(1)
 	}
-	if err = (&clustercontroller.ClusterManagerReconciler{
+	if err = (&clusterController.ClusterManagerReconciler{
 		Client: mgr.GetClient(),
 		Log:    ctrl.Log.WithName("controllers").WithName("ClusterManager"),
 		Scheme: mgr.GetScheme(),
@@ -104,14 +106,14 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "ClusterManager")
 		os.Exit(1)
 	}
-	// if err = (&claimV1alpha1.ClusterClaim{}).SetupWebhookWithManager(mgr); err != nil {
-	// 	setupLog.Error(err, "unable to create webhook", "webhook", "ClusterClaim")
-	// 	os.Exit(1)
-	// }
-	// if err = (&clusterV1alpha1.ClusterManager{}).SetupWebhookWithManager(mgr); err != nil {
-	// 	setupLog.Error(err, "unable to create webhook", "webhook", "ClusterManager")
-	// 	os.Exit(1)
-	// }
+	if err = (&claimV1alpha1.ClusterClaim{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "ClusterClaim")
+		os.Exit(1)
+	}
+	if err = (&clusterV1alpha1.ClusterManager{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "ClusterManager")
+		os.Exit(1)
+	}
 
 	// if err = (&clusterController.ClusterReconciler{
 	// 	Client: mgr.GetClient(),
@@ -137,7 +139,7 @@ func main() {
 	// 	setupLog.Error(err, "unable to create controller", "controller", "serviceController")
 	// 	os.Exit(1)
 	// }
-	if err = (&clustercontroller.ClusterRegistrationReconciler{
+	if err = (&clusterController.ClusterRegistrationReconciler{
 		Client: mgr.GetClient(),
 		Log:    ctrl.Log.WithName("controllers").WithName("ClusterRegistration"),
 		Scheme: mgr.GetScheme(),
@@ -145,10 +147,10 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "ClusterRegistration")
 		os.Exit(1)
 	}
-	// if err = (&clusterV1alpha1.ClusterRegistration{}).SetupWebhookWithManager(mgr); err != nil {
-	// 	setupLog.Error(err, "unable to create webhook", "webhook", "ClusterRegistration")
-	// 	os.Exit(1)
-	// }
+	if err = (&clusterV1alpha1.ClusterRegistration{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "ClusterRegistration")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	setupLog.Info("starting manager")

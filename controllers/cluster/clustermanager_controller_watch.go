@@ -87,11 +87,8 @@ func (r *ClusterManagerReconciler) requeueClusterManagersForJob(o client.Object)
 		} else if job.Annotations[clusterV1alpha1.AnnotationKeyJobType] == clusterV1alpha1.CreatingKubeconfig {
 			clm.Status.KubeconfigReady = false
 			log.Error(fmt.Errorf(err), "Failed to create kubeconfig")
-
-		} else if job.Annotations[clusterV1alpha1.AnnotationKeyJobType] == clusterV1alpha1.DestroyingInfrastructure {
-
 		} else {
-
+			return nil
 		}
 
 		clm.Status.FailureReason = err
@@ -115,11 +112,8 @@ func (r *ClusterManagerReconciler) requeueClusterManagersForJob(o client.Object)
 		} else if job.Annotations[clusterV1alpha1.AnnotationKeyJobType] == clusterV1alpha1.CreatingKubeconfig {
 			clm.Status.KubeconfigReady = true
 			log.Info("Created kubeconfig")
-
-		} else if job.Annotations[clusterV1alpha1.AnnotationKeyJobType] == clusterV1alpha1.DestroyingInfrastructure {
-
 		} else {
-
+			return nil
 		}
 		clm.Status.FailureReason = ""
 

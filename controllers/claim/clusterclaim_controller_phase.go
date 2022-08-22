@@ -103,7 +103,7 @@ func (r *ClusterClaimReconciler) CreatePersistentVolumeClaim(ctx context.Context
 		Namespace: cc.Namespace,
 	}
 
-	// clm의 suffix값을 이용해서 pvc name을 지정해준다.
+	// clm의 생성 후, pvc 생성
 	clm := &clusterV1alpha1.ClusterManager{}
 	err := r.Get(context.TODO(), key, clm)
 	if errors.IsNotFound(err) {
@@ -115,17 +115,18 @@ func (r *ClusterClaimReconciler) CreatePersistentVolumeClaim(ctx context.Context
 	}
 
 	key = types.NamespacedName{
-		Name:      fmt.Sprintf("%s-%s", cc.Spec.ClusterName, clm.Annotations[clusterV1alpha1.AnnotationKeyClmSuffix]),
+		Name:      fmt.Sprintf("%s-volume-claim", cc.Spec.ClusterName),
 		Namespace: cc.Namespace,
 	}
 
 	if err := r.Get(context.TODO(), key, &coreV1.PersistentVolumeClaim{}); errors.IsNotFound(err) {
 		pvc := &coreV1.PersistentVolumeClaim{
 			ObjectMeta: metaV1.ObjectMeta{
-				Name:      fmt.Sprintf("%s-%s", cc.Spec.ClusterName, clm.Annotations[clusterV1alpha1.AnnotationKeyClmSuffix]),
+				Name:      fmt.Sprintf("%s-volume-claim", cc.Spec.ClusterName),
 				Namespace: cc.Namespace,
 				Labels: map[string]string{
-					clusterV1alpha1.LabelKeyClmName: cc.Spec.ClusterName,
+					clusterV1alpha1.LabelKeyClmName:      cc.Spec.ClusterName,
+					clusterV1alpha1.LabelKeyClmNamespace: cc.Namespace,
 				},
 			},
 			Spec: coreV1.PersistentVolumeClaimSpec{
@@ -136,7 +137,7 @@ func (r *ClusterClaimReconciler) CreatePersistentVolumeClaim(ctx context.Context
 				Resources: coreV1.ResourceRequirements{
 					Limits: coreV1.ResourceList{},
 					Requests: coreV1.ResourceList{
-						coreV1.ResourceStorage: resource.MustParse("1Gi"),
+						coreV1.ResourceStorage: resource.MustParse("10M"),
 					},
 				},
 			},
@@ -150,68 +151,5 @@ func (r *ClusterClaimReconciler) CreatePersistentVolumeClaim(ctx context.Context
 		return ctrl.Result{RequeueAfter: requeueAfter10Second}, err
 	}
 
-	return ctrl.Result{}, nil
-}
-
-func (r *ClusterClaimReconciler) CreatePersistentVolume(ctx context.Context, cc *claimV1alpha1.ClusterClaim) (ctrl.Result, error) {
-	if cc.Status.Phase != "Approved" {
-		return ctrl.Result{}, nil
-	}
-
-	log := r.Log.WithValues("clusterclaim", cc.GetNamespacedName())
-	log.Info("Start to reconcile phase for CreatePersistentVolume")
-
-	key := types.NamespacedName{
-		Name:      cc.Spec.ClusterName,
-		Namespace: cc.Namespace,
-	}
-
-	// clm의 suffix값을 이용해서 pvc name을 지정해준다.
-	clm := &clusterV1alpha1.ClusterManager{}
-	err := r.Get(context.TODO(), key, clm)
-	if errors.IsNotFound(err) {
-		log.Info("Wait for creating cluster manager")
-		return ctrl.Result{RequeueAfter: requeueAfter10Second}, nil
-	} else if err != nil {
-		log.Error(err, "Fail to get cluster manager")
-		return ctrl.Result{}, nil
-	}
-
-	key = types.NamespacedName{
-		Name:      fmt.Sprintf("%s-%s", cc.Spec.ClusterName, clm.Annotations[clusterV1alpha1.AnnotationKeyClmSuffix]),
-		Namespace: cc.Namespace,
-	}
-
-	if err := r.Get(context.TODO(), key, &coreV1.PersistentVolume{}); errors.IsNotFound(err) {
-		pvc := &coreV1.PersistentVolume{
-			ObjectMeta: metaV1.ObjectMeta{
-				Name:      fmt.Sprintf("%s-%s", cc.Spec.ClusterName, clm.Annotations[clusterV1alpha1.AnnotationKeyClmSuffix]),
-				Namespace: cc.Namespace,
-				Labels: map[string]string{
-					clusterV1alpha1.LabelKeyClmName: cc.Spec.ClusterName,
-				},
-			},
-			Spec: coreV1.PersistentVolumeSpec{
-				Capacity: coreV1.ResourceList{
-					coreV1.ResourceStorage: resource.MustParse("1Gi"),
-				},
-				AccessModes: []coreV1.PersistentVolumeAccessMode{
-					coreV1.ReadWriteOnce,
-				},
-				ClaimRef: &coreV1.ObjectReference{
-					Name:      fmt.Sprintf("%s-%s", cc.Spec.ClusterName, clm.Annotations[clusterV1alpha1.AnnotationKeyClmSuffix]),
-					Namespace: cc.Namespace,
-				},
-				PersistentVolumeReclaimPolicy: coreV1.PersistentVolumeReclaimRetain,
-			},
-		}
-
-		if err := r.Create(context.TODO(), pvc); err != nil {
-			return ctrl.Result{RequeueAfter: requeueAfter10Second}, err
-		}
-
-	} else if err != nil {
-		return ctrl.Result{RequeueAfter: requeueAfter10Second}, err
-	}
 	return ctrl.Result{}, nil
 }

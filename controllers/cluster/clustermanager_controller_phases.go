@@ -168,7 +168,7 @@ func (r *ClusterManagerReconciler) ProvisioningInfra(ctx context.Context, cluste
 	log.Info("Start to reconcile phase for ProvisioningInfra")
 
 	key := types.NamespacedName{
-		Name:      fmt.Sprintf("%s-provision-infra-%s", clusterManager.Name, clusterManager.Annotations[clusterV1alpha1.AnnotationKeyClmSuffix]),
+		Name:      fmt.Sprintf("%s-provision-infra", clusterManager.Name),
 		Namespace: clusterManager.Namespace,
 	}
 
@@ -202,7 +202,7 @@ func (r *ClusterManagerReconciler) InstallK8s(ctx context.Context, clusterManage
 	log.Info("Start to reconcile phase for InstallK8S")
 
 	key := types.NamespacedName{
-		Name:      fmt.Sprintf("%s-install-k8s-%s", clusterManager.Name, clusterManager.Annotations[clusterV1alpha1.AnnotationKeyClmSuffix]),
+		Name:      fmt.Sprintf("%s-install-k8s", clusterManager.Name),
 		Namespace: clusterManager.Namespace,
 	}
 
@@ -236,7 +236,7 @@ func (r *ClusterManagerReconciler) CreateKubeconfig(ctx context.Context, cluster
 	log.Info("Start to reconcile phase for CreateKubeconfig")
 
 	key := types.NamespacedName{
-		Name:      fmt.Sprintf("%s-create-kubeconfig-%s", clusterManager.Name, clusterManager.Annotations[clusterV1alpha1.AnnotationKeyClmSuffix]),
+		Name:      fmt.Sprintf("%s-create-kubeconfig", clusterManager.Name),
 		Namespace: clusterManager.Namespace,
 	}
 

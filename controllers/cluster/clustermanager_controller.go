@@ -16,11 +16,11 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/go-logr/logr"
 	certmanagerV1 "github.com/jetstack/cert-manager/pkg/apis/certmanager/v1"
-	servicecatalogv1beta1 "github.com/kubernetes-sigs/service-catalog/pkg/apis/servicecatalog/v1beta1"
 	clusterV1alpha1 "github.com/tmax-cloud/hypercloud-multi-operator/apis/cluster/v1alpha1"
 	util "github.com/tmax-cloud/hypercloud-multi-operator/controllers/util"
 	traefikV1alpha1 "github.com/traefik/traefik/v2/pkg/provider/kubernetes/crd/traefik/v1alpha1"
@@ -35,7 +35,6 @@ import (
 	batchV1 "k8s.io/api/batch/v1"
 	capiV1alpha3 "sigs.k8s.io/cluster-api/api/v1alpha3"
 
-	// controlplanev1 "sigs.k8s.io/cluster-api/controlplane/kubeadm/api/v1alpha3"
 	"sigs.k8s.io/cluster-api/util/patch"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -351,22 +350,47 @@ func (r *ClusterManagerReconciler) reconcileDelete(ctx context.Context, clusterM
 		return ctrl.Result{}, err
 	}
 
-	// delete serviceinstance
 	key = types.NamespacedName{
-		Name:      clusterManager.Name + "-" + clusterManager.Annotations[clusterV1alpha1.AnnotationKeyClmSuffix],
+		Name:      fmt.Sprintf("%s-destroy-infra", clusterManager.Name),
 		Namespace: clusterManager.Namespace,
 	}
-	serviceInstance := &servicecatalogv1beta1.ServiceInstance{}
-	if err := r.Get(context.TODO(), key, serviceInstance); errors.IsNotFound(err) {
-		log.Info("ServiceInstance is already deleted. Waiting cluster to be deleted")
-	} else if err != nil {
-		log.Error(err, "Failed to get serviceInstance")
-		return ctrl.Result{}, err
-	} else {
-		if err := r.Delete(context.TODO(), serviceInstance); err != nil {
-			log.Error(err, "Failed to delete serviceInstance")
+
+	dij := &batchV1.Job{}
+	if err := r.Get(context.TODO(), key, dij); errors.IsNotFound(err) {
+		log.Info("Create destroy job")
+
+		dij, err := r.DestroyInfrastrucutreJob(clusterManager)
+		if err != nil {
+			log.Error(err, "Fail to create destroy job")
 			return ctrl.Result{}, err
 		}
+
+		err = r.Create(context.TODO(), dij)
+		if err != nil {
+			log.Error(err, "Fail to create destroy job")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: requeueAfter10Second}, nil
+
+	} else if err != nil {
+		log.Error(err, "Failed to get destroy job")
+		return ctrl.Result{}, err
+	}
+
+	if dij.Status.Active == 1 {
+		log.Info("Wait for cluster to be deleted")
+		return ctrl.Result{RequeueAfter: requeueAfter10Second}, nil
+	} else if dij.Status.Failed == 1 {
+		log.Error(nil, "Fail to destroy cluster")
+		return ctrl.Result{}, nil
+	}
+
+	if err := r.DeleteExistJobs(clusterManager); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if err := r.DeletePersistentVolumeClaim(clusterManager); err != nil {
+		return ctrl.Result{}, err
 	}
 
 	//delete handling
@@ -475,7 +499,7 @@ func (r *ClusterManagerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				return false
 			},
 			DeleteFunc: func(e event.DeleteEvent) bool {
-				return true
+				return false
 			},
 			GenericFunc: func(e event.GenericEvent) bool {
 				return false
