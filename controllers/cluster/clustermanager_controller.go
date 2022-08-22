@@ -264,7 +264,9 @@ func (r *ClusterManagerReconciler) reconcile(ctx context.Context, clusterManager
 			// r.kubeadmControlPlaneUpdate,
 			// cluster claim 을 통해, cluster 의 spec 을 변경한 경우, 그에 맞게 worker 노드의 spec 을 업데이트 해준다.
 			// r.machineDeploymentUpdate,
-			r.ProvisioningCluster,
+			r.ProvisioningInfra,
+			r.InstallK8s,
+			r.CreateKubeconfig,
 		)
 	} else {
 		// cluster 를 등록한 경우에만 수행

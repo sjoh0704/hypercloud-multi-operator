@@ -23,7 +23,6 @@ import (
 	"strings"
 
 	argocdV1alpha1 "github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
-	// servicecatalogv1beta1 "github.com/kubernetes-sigs/service-catalog/pkg/apis/servicecatalog/v1beta1"
 	clusterV1alpha1 "github.com/tmax-cloud/hypercloud-multi-operator/apis/cluster/v1alpha1"
 	hyperauthCaller "github.com/tmax-cloud/hypercloud-multi-operator/controllers/hyperAuth"
 	util "github.com/tmax-cloud/hypercloud-multi-operator/controllers/util"
@@ -32,9 +31,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	// "k8s.io/apimachinery/pkg/runtime"
-
-	// "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/clientcmd"
 
@@ -163,13 +159,13 @@ func (r *ClusterManagerReconciler) UpdateClusterManagerStatus(ctx context.Contex
 	return ctrl.Result{}, nil
 }
 
-func (r *ClusterManagerReconciler) ProvisioningCluster(ctx context.Context, clusterManager *clusterV1alpha1.ClusterManager) (ctrl.Result, error) {
-	if clusterManager.Status.InfrastructureReady {
+func (r *ClusterManagerReconciler) ProvisioningInfra(ctx context.Context, clusterManager *clusterV1alpha1.ClusterManager) (ctrl.Result, error) {
+	if clusterManager.Status.InfrastructureReady || clusterManager.Status.FailureReason != "" {
 		return ctrl.Result{}, nil
 	}
 
 	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
-	log.Info("Start to reconcile phase for CreateProvisioningJob")
+	log.Info("Start to reconcile phase for ProvisioningInfra")
 
 	key := types.NamespacedName{
 		Name:      fmt.Sprintf("%s-provision-infra-%s", clusterManager.Name, clusterManager.Annotations[clusterV1alpha1.AnnotationKeyClmSuffix]),
@@ -186,7 +182,7 @@ func (r *ClusterManagerReconciler) ProvisioningCluster(ctx context.Context, clus
 		}
 
 		if err = r.Create(context.TODO(), pij); err != nil {
-			log.Error(err, "Failed to create provisioning infrastructure job")
+			log.Error(err, "Failed to create provisioning-infrastructure job")
 			return ctrl.Result{}, nil
 		}
 
@@ -197,107 +193,73 @@ func (r *ClusterManagerReconciler) ProvisioningCluster(ctx context.Context, clus
 	return ctrl.Result{}, nil
 }
 
-// func (r *ClusterManagerReconciler) CreateServiceInstance(ctx context.Context, clusterManager *clusterV1alpha1.ClusterManager) (ctrl.Result, error) {
-// if clusterManager.Annotations[clusterV1alpha1.AnnotationKeyClmSuffix] != "" {
-// 	return ctrl.Result{}, nil
-// }
-// log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
-// log.Info("Start to reconcile phase for CreateServiceInstance")
+func (r *ClusterManagerReconciler) InstallK8s(ctx context.Context, clusterManager *clusterV1alpha1.ClusterManager) (ctrl.Result, error) {
+	if clusterManager.Status.K8sReady || !clusterManager.Status.InfrastructureReady || clusterManager.Status.FailureReason != "" {
+		return ctrl.Result{}, nil
+	}
 
-// key := types.NamespacedName{
-// 	Name:      clusterManager.Name + clusterManager.Annotations[clusterV1alpha1.AnnotationKeyClmSuffix],
-// 	Namespace: clusterManager.Namespace,
-// }
-// if err := r.Get(context.TODO(), key, &servicecatalogv1beta1.ServiceInstance{}); errors.IsNotFound(err) {
-// 	clusterJson, err := json.Marshal(
-// 		&ClusterParameter{
-// 			Namespace:         clusterManager.Namespace,
-// 			ClusterName:       clusterManager.Name,
-// 			Owner:             clusterManager.Annotations[util.AnnotationKeyOwner],
-// 			KubernetesVersion: clusterManager.Spec.Version,
-// 			MasterNum:         clusterManager.Spec.MasterNum,
-// 			WorkerNum:         clusterManager.Spec.WorkerNum,
-// 		},
-// 	)
-// 	if err != nil {
-// 		log.Error(err, "Failed to marshal cluster parameters")
-// 	}
+	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
+	log.Info("Start to reconcile phase for InstallK8S")
 
-// 	var providerJson []byte
-// 	switch strings.ToUpper(clusterManager.Spec.Provider) {
-// 	case util.ProviderAws:
-// 		providerJson, err = json.Marshal(
-// 			&AwsParameter{
-// 				Region:     clusterManager.AwsSpec.Region,
-// 				Master: clusterManager.AwsSpec.MasterType,
-// 				Worker: clusterManager.AwsSpec.WorkerType,
-// 			},
-// 		)
-// 		if err != nil {
-// 			log.Error(err, "Failed to marshal cluster parameters")
-// 			return ctrl.Result{}, err
-// 		}
-// 	case util.ProviderVsphere:
-// 		providerJson, err = json.Marshal(
-// 			&VsphereParameter{
-// 				PodCidr:             clusterManager.VsphereSpec.PodCidr,
-// 				VcenterIp:           clusterManager.VsphereSpec.VcenterIp,
-// 				VcenterId:           clusterManager.VsphereSpec.VcenterId,
-// 				VcenterPassword:     clusterManager.VsphereSpec.VcenterPassword,
-// 				VcenterThumbprint:   clusterManager.VsphereSpec.VcenterThumbprint,
-// 				VcenterNetwork:      clusterManager.VsphereSpec.VcenterNetwork,
-// 				VcenterDataCenter:   clusterManager.VsphereSpec.VcenterDataCenter,
-// 				VcenterDataStore:    clusterManager.VsphereSpec.VcenterDataStore,
-// 				VcenterFolder:       clusterManager.VsphereSpec.VcenterFolder,
-// 				VcenterResourcePool: clusterManager.VsphereSpec.VcenterResourcePool,
-// 				VcenterKcpIp:        clusterManager.VsphereSpec.VcenterKcpIp,
-// 				VcenterCpuNum:       clusterManager.VsphereSpec.VcenterCpuNum,
-// 				VcenterMemSize:      clusterManager.VsphereSpec.VcenterMemSize,
-// 				VcenterDiskSize:     clusterManager.VsphereSpec.VcenterDiskSize,
-// 				VcenterTemplate:     clusterManager.VsphereSpec.VcenterTemplate,
-// 			},
-// 		)
-// 		if err != nil {
-// 			log.Error(err, "Failed to marshal cluster parameters")
-// 			return ctrl.Result{}, err
-// 		}
-// 	}
+	key := types.NamespacedName{
+		Name:      fmt.Sprintf("%s-install-k8s-%s", clusterManager.Name, clusterManager.Annotations[clusterV1alpha1.AnnotationKeyClmSuffix]),
+		Namespace: clusterManager.Namespace,
+	}
 
-// 	clusterJson = util.MergeJson(clusterJson, providerJson)
-// 	generatedSuffix := util.CreateSuffixString()
-// 	serviceInstance := &servicecatalogv1beta1.ServiceInstance{
-// 		ObjectMeta: metav1.ObjectMeta{
-// 			Name:      clusterManager.Name + "-" + generatedSuffix,
-// 			Namespace: clusterManager.Namespace,
-// 			Annotations: map[string]string{
-// 				util.AnnotationKeyOwner:   clusterManager.Annotations[util.AnnotationKeyCreator],
-// 				util.AnnotationKeyCreator: clusterManager.Annotations[util.AnnotationKeyCreator],
-// 			},
-// 		},
-// 		Spec: servicecatalogv1beta1.ServiceInstanceSpec{
-// 			PlanReference: servicecatalogv1beta1.PlanReference{
-// 				ClusterServiceClassExternalName: "capi-" + strings.ToLower(clusterManager.Spec.Provider) + "-template",
-// 				ClusterServicePlanExternalName:  "capi-" + strings.ToLower(clusterManager.Spec.Provider) + "-template-plan-default",
-// 			},
-// 			Parameters: &runtime.RawExtension{
-// 				Raw: clusterJson,
-// 			},
-// 		},
-// 	}
-// 	if err = r.Create(context.TODO(), serviceInstance); err != nil {
-// 		log.Error(err, "Failed to create ServiceInstance")
-// 		return ctrl.Result{}, err
-// 	}
+	if err := r.Get(context.TODO(), key, &batchV1.Job{}); errors.IsNotFound(err) {
 
-// 	ctrl.SetControllerReference(clusterManager, serviceInstance, r.Scheme)
-// 	clusterManager.Annotations[clusterV1alpha1.AnnotationKeyClmSuffix] = generatedSuffix
-// } else if err != nil {
-// 	log.Error(err, "Failed to get ServiceInstance")
-// 	return ctrl.Result{}, err
-// }
+		ikj, err := r.InstallK8sJob(clusterManager)
 
-// 	return ctrl.Result{}, nil
-// }
+		if err != nil {
+			log.Error(err, "Failed to create install-k8s job")
+			return ctrl.Result{}, nil
+		}
+
+		if err = r.Create(context.TODO(), ikj); err != nil {
+			log.Error(err, "Failed to create install-k8s job")
+			return ctrl.Result{}, nil
+		}
+
+	} else if err != nil {
+		log.Error(err, "Failed to get install-k8s job")
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{}, nil
+}
+
+func (r *ClusterManagerReconciler) CreateKubeconfig(ctx context.Context, clusterManager *clusterV1alpha1.ClusterManager) (ctrl.Result, error) {
+	if clusterManager.Status.KubeconfigReady || !clusterManager.Status.K8sReady || !clusterManager.Status.InfrastructureReady || clusterManager.Status.FailureReason != "" {
+		return ctrl.Result{}, nil
+	}
+
+	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
+	log.Info("Start to reconcile phase for CreateKubeconfig")
+
+	key := types.NamespacedName{
+		Name:      fmt.Sprintf("%s-create-kubeconfig-%s", clusterManager.Name, clusterManager.Annotations[clusterV1alpha1.AnnotationKeyClmSuffix]),
+		Namespace: clusterManager.Namespace,
+	}
+
+	if err := r.Get(context.TODO(), key, &batchV1.Job{}); errors.IsNotFound(err) {
+
+		ckj, err := r.CreateKubeconfigJob(clusterManager)
+
+		if err != nil {
+			log.Error(err, "Failed to create create-kubeconfig job")
+			return ctrl.Result{}, nil
+		}
+
+		if err = r.Create(context.TODO(), ckj); err != nil {
+			log.Error(err, "Failed to create create-kubeconfig job")
+			return ctrl.Result{}, nil
+		}
+
+	} else if err != nil {
+		log.Error(err, "Failed to get create-kubeconfig job")
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{}, nil
+}
 
 func (r *ClusterManagerReconciler) SetEndpoint(ctx context.Context, clusterManager *clusterV1alpha1.ClusterManager) (ctrl.Result, error) {
 	if clusterManager.Annotations[clusterV1alpha1.AnnotationKeyClmApiserver] != "" {

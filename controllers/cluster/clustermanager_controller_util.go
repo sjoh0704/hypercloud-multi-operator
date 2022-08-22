@@ -51,11 +51,21 @@ func CreateEnvFromClustermanagerSpec(clusterManager *clusterV1alpha1.ClusterMana
 		})
 	}
 
-	// cluster name
-	EnvList = append(EnvList, coreV1.EnvVar{
-		Name:  "TF_VAR_aws_cluster_name",
-		Value: fmt.Sprintf("%s", clusterManager.Name),
-	})
+	// cluster name, master num, worker num
+	EnvList = append(EnvList,
+		coreV1.EnvVar{
+			Name:  "TF_VAR_aws_cluster_name",
+			Value: fmt.Sprintf("%s", clusterManager.Name),
+		},
+		coreV1.EnvVar{
+			Name:  "TF_VAR_aws_kube_master_num",
+			Value: fmt.Sprintf("%d", clusterManager.Spec.MasterNum),
+		},
+		coreV1.EnvVar{
+			Name:  "TF_VAR_aws_kube_worker_num",
+			Value: fmt.Sprintf("%d", clusterManager.Spec.WorkerNum),
+		},
+	)
 
 	// region에 따른 host os 지정이 필요
 	if AwsSpec.HostOS == "ubuntu" {
@@ -70,6 +80,10 @@ func CreateEnvFromClustermanagerSpec(clusterManager *clusterV1alpha1.ClusterMana
 			},
 			coreV1.EnvVar{
 				Name:  "USER",
+				Value: "ubuntu",
+			},
+			coreV1.EnvVar{
+				Name:  "HOST_OS",
 				Value: "ubuntu",
 			},
 		)
@@ -87,6 +101,10 @@ func CreateEnvFromClustermanagerSpec(clusterManager *clusterV1alpha1.ClusterMana
 			coreV1.EnvVar{
 				Name:  "USER",
 				Value: "ec2-user",
+			},
+			coreV1.EnvVar{
+				Name:  "HOST_OS",
+				Value: "rhel",
 			},
 		)
 	} else {
@@ -109,11 +127,6 @@ func CreateEnvFromClustermanagerSpec(clusterManager *clusterV1alpha1.ClusterMana
 	}
 
 	// master
-	EnvList = append(EnvList, coreV1.EnvVar{
-		Name:  "TF_VAR_aws_kube_master_num",
-		Value: fmt.Sprintf("%d", clusterManager.Spec.MasterNum),
-	})
-
 	if AwsSpec.Master.Type != "" {
 		EnvList = append(EnvList, coreV1.EnvVar{
 			Name:  "TF_VAR_aws_kube_master_size",
@@ -129,11 +142,6 @@ func CreateEnvFromClustermanagerSpec(clusterManager *clusterV1alpha1.ClusterMana
 	}
 
 	// worker
-	EnvList = append(EnvList, coreV1.EnvVar{
-		Name:  "TF_VAR_aws_kube_worker_num",
-		Value: fmt.Sprintf("%d", clusterManager.Spec.WorkerNum),
-	})
-
 	if AwsSpec.Worker.Type != "" {
 		EnvList = append(EnvList, coreV1.EnvVar{
 			Name:  "TF_VAR_aws_kube_worker_size",
@@ -178,19 +186,164 @@ func CreateEnvFromClustermanagerSpec(clusterManager *clusterV1alpha1.ClusterMana
 			})
 	}
 
+	// additional tags
+	if len(AwsSpec.AdditionalTags) > 0 {
+		addtionalTags := ""
+		for key, value := range AwsSpec.AdditionalTags {
+			addtionalTags += fmt.Sprintf("%s=\"%s\", ", key, value)
+		}
+		EnvList = append(EnvList,
+			coreV1.EnvVar{
+				Name:  "TF_VAR_default_tags",
+				Value: fmt.Sprintf("{ %s }", addtionalTags[:len(addtionalTags)-2]),
+			})
+	}
+
 	return EnvList, nil
 }
 
-// func (r *ClusterManagerReconciler) CreateInstallingK8sJob(clusterManager *clusterV1alpha1.ClusterManager) err {
+func (r *ClusterManagerReconciler) CreateKubeconfigJob(clusterManager *clusterV1alpha1.ClusterManager) (*batchv1.Job, error) {
+	var backoffLimit int32 = 0
+	var serviceAutoMount bool = true
 
-// }
+	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
+	envList, err := CreateEnvFromClustermanagerSpec(clusterManager)
+	if err != nil {
+		log.Error(err, "Fail to create envList from cluster manager spec")
+	}
+
+	installK8sJob := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-create-kubeconfig-%s", clusterManager.Name, clusterManager.Annotations[clusterV1alpha1.AnnotationKeyClmSuffix]),
+			Namespace: clusterManager.Namespace,
+			Annotations: map[string]string{
+				clusterV1alpha1.AnnotationKeyJobType: clusterV1alpha1.CreatingKubeconfig,
+			},
+			Labels: map[string]string{
+				clusterV1alpha1.LabelKeyClmName:      clusterManager.Name,
+				clusterV1alpha1.LabelKeyClmNamespace: clusterManager.Namespace,
+			},
+		},
+		Spec: batchv1.JobSpec{
+			Template: coreV1.PodTemplateSpec{
+				Spec: coreV1.PodSpec{
+					ServiceAccountName:           "kubectl",
+					AutomountServiceAccountToken: &serviceAutoMount,
+					Containers: []coreV1.Container{
+						{
+							Name:    "create-kubeconfig",
+							Image:   "bitnami/kubectl:latest",
+							Command: []string{"/bin/sh", "-c"},
+							Args:    []string{fmt.Sprintf("kubectl create secret generic %s-%s-kubeconfig --from-file=value=/context/admin.conf 2> /dev/termination-log;", clusterManager.Namespace, clusterManager.Name)},
+							Env:     envList,
+							VolumeMounts: []coreV1.VolumeMount{
+								{
+									Name:      "kubespray-context",
+									MountPath: "/context",
+								},
+							},
+						},
+					},
+					Volumes: []coreV1.Volume{
+						{
+							Name: "kubespray-context",
+							VolumeSource: coreV1.VolumeSource{
+								PersistentVolumeClaim: &coreV1.PersistentVolumeClaimVolumeSource{
+									ClaimName: "kubespray-pvc",
+								},
+							},
+						},
+					},
+					RestartPolicy: coreV1.RestartPolicyNever,
+				},
+			},
+			BackoffLimit: &backoffLimit,
+		},
+	}
+
+	return installK8sJob, nil
+}
+
+func (r *ClusterManagerReconciler) InstallK8sJob(clusterManager *clusterV1alpha1.ClusterManager) (*batchv1.Job, error) {
+	var backoffLimit int32 = 0
+	var privateKeyDefaultValue int32 = 320
+
+	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
+	envList, err := CreateEnvFromClustermanagerSpec(clusterManager)
+	if err != nil {
+		log.Error(err, "Fail to create envList from cluster manager spec")
+	}
+
+	installK8sJob := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-install-k8s-%s", clusterManager.Name, clusterManager.Annotations[clusterV1alpha1.AnnotationKeyClmSuffix]),
+			Namespace: clusterManager.Namespace,
+			Annotations: map[string]string{
+				clusterV1alpha1.AnnotationKeyJobType: clusterV1alpha1.InstallingK8s,
+			},
+			Labels: map[string]string{
+				clusterV1alpha1.LabelKeyClmName:      clusterManager.Name,
+				clusterV1alpha1.LabelKeyClmNamespace: clusterManager.Namespace,
+			},
+		},
+		Spec: batchv1.JobSpec{
+			Template: coreV1.PodTemplateSpec{
+				Spec: coreV1.PodSpec{
+					Containers: []coreV1.Container{
+						{
+							Name:    "install-k8s",
+							Image:   "kubespray:test",
+							Command: []string{"/bin/sh", "-c"},
+							Args:    []string{"./install.sh 2> /dev/termination-log;"},
+							Env:     envList,
+							VolumeMounts: []coreV1.VolumeMount{
+								{
+									Name:      "kubespray-context",
+									MountPath: "/context",
+								},
+								{
+									Name:      "aws-private-key",
+									MountPath: "/kubespray/key.pem",
+									SubPath:   "key.pem",
+								},
+							},
+						},
+					},
+					Volumes: []coreV1.Volume{
+						{
+							Name: "kubespray-context",
+							VolumeSource: coreV1.VolumeSource{
+								PersistentVolumeClaim: &coreV1.PersistentVolumeClaimVolumeSource{
+									ClaimName: "kubespray-pvc",
+								},
+							},
+						},
+						{
+							Name: "aws-private-key",
+							VolumeSource: coreV1.VolumeSource{
+								Secret: &coreV1.SecretVolumeSource{
+									SecretName:  "aws-private-key",
+									DefaultMode: &privateKeyDefaultValue,
+								},
+							},
+						},
+					},
+					RestartPolicy: coreV1.RestartPolicyNever,
+				},
+			},
+			BackoffLimit: &backoffLimit,
+		},
+	}
+
+	return installK8sJob, nil
+}
 
 func (r *ClusterManagerReconciler) ProvisioningInfrastrucutreJob(clusterManager *clusterV1alpha1.ClusterManager) (*batchv1.Job, error) {
 	var backoffLimit int32 = 0
 	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
 	envList, err := CreateEnvFromClustermanagerSpec(clusterManager)
 	if err != nil {
-		log.Error(err, "fails creating env from cluster manager spec")
+		log.Error(err, "Fail to create envList from cluster manager spec")
 	}
 
 	provisioningInfrastrucutreJob := &batchv1.Job{
@@ -198,8 +351,6 @@ func (r *ClusterManagerReconciler) ProvisioningInfrastrucutreJob(clusterManager 
 			Name:      fmt.Sprintf("%s-provision-infra-%s", clusterManager.Name, clusterManager.Annotations[clusterV1alpha1.AnnotationKeyClmSuffix]),
 			Namespace: clusterManager.Namespace,
 			Annotations: map[string]string{
-				util.AnnotationKeyOwner:              clusterManager.Annotations[util.AnnotationKeyCreator],
-				util.AnnotationKeyCreator:            clusterManager.Annotations[util.AnnotationKeyCreator],
 				clusterV1alpha1.AnnotationKeyJobType: clusterV1alpha1.ProvisioningInfrastrucutre,
 			},
 			Labels: map[string]string{
