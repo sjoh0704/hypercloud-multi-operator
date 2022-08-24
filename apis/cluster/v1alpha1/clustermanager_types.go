@@ -60,15 +60,15 @@ type ProviderAwsSpec struct {
 	Region string `json:"region,omitempty"`
 	// The info of bastion instance
 	Bastion Instance `json:"bastion,omitempty"`
-	// The info of master instance 
+	// The info of master instance
 	Master Instance `json:"master,omitempty"`
-	// The info of worker instance 
+	// The info of worker instance
 	Worker Instance `json:"worker,omitempty"`
-	// The type of OS that instances(master, worker, bastion) use 
+	// The type of OS that instances(master, worker, bastion) use
 	HostOS string `json:"hostOs,omitempty"`
 	// The network spec that cluster uses
 	NetworkSpec NetworkSpec `json:"networkSpec,omitempty"`
-	// The additional tag attached to aws resources 
+	// The additional tag attached to aws resources
 	AdditionalTags map[string]string `json:"additionalTags,omitempty"`
 }
 
@@ -127,7 +127,7 @@ type ClusterManagerStatus struct {
 	Ready                  bool                `json:"ready,omitempty"`
 	MasterRun              int                 `json:"masterRun,omitempty"`
 	WorkerRun              int                 `json:"workerRun,omitempty"`
-	FailureReason          string              `json:"failureReason,omitempty"`
+	FailureReason          *string             `json:"failureReason,omitempty"`
 	Phase                  ClusterManagerPhase `json:"phase,omitempty"`
 	ControlPlaneEndpoint   string              `json:"controlPlaneEndpoint,omitempty"`
 	ArgoReady              bool                `json:"argoReady,omitempty"`
@@ -137,9 +137,7 @@ type ClusterManagerStatus struct {
 	HyperregistryOidcReady bool                `json:"hyperregistryOidcReady,omitempty"`
 	ApplicationLink        bool                `json:"applicationLink,omitempty"`
 	OpenSearchReady        bool                `json:"openSearchReady,omitempty"`
-	K8sReady               bool                `json:"k8sReady,omitempty"`
-	InfrastructureReady    bool                `json:"infrastructureReady,omitempty"`
-	KubeconfigReady        bool                `json:"kubeconfigReady,omitempty"`
+	Conditions             []metav1.Condition  `json:"conditions,omitempty"`
 	// will be deprecated
 	PrometheusReady bool `json:"prometheusReady,omitempty"`
 }
@@ -227,8 +225,13 @@ const (
 	InstallingK8s              = "installing-k8s"
 	CreatingKubeconfig         = "creating-kubeconfig"
 	DestroyingInfrastructure   = "destroying-infrastructure"
+	AnnotationKeyJobType       = "clustermanager.cluster.tmax.io/job-type"
+)
 
-	AnnotationKeyJobType = "clustermanager.cluster.tmax.io/job-type"
+const (
+	Kubespray      = "kubespray"
+	KubesprayImage = "kubespray:test"
+	KubectlImage   = "bitnami/kubectl:latest"
 )
 
 // +kubebuilder:object:root=true
@@ -274,4 +277,12 @@ func (c *ClusterManager) GetNamespacedName() types.NamespacedName {
 
 func (c *ClusterManager) GetNamespacedPrefix() string {
 	return strings.Join([]string{c.Namespace, c.Name}, "-")
+}
+
+func (c *ClusterManager) GetConditions() []metav1.Condition {
+	return c.Status.Conditions
+}
+
+func (c *ClusterManager) SetConditions(conditions []metav1.Condition) {
+	c.Status.Conditions = conditions
 }

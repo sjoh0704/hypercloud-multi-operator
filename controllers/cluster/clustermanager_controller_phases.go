@@ -29,7 +29,9 @@ import (
 
 	coreV1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/clientcmd"
@@ -67,7 +69,7 @@ func (r *ClusterManagerReconciler) UpdateClusterManagerStatus(ctx context.Contex
 	kubeadmConfig, err := remoteClientset.
 		CoreV1().
 		ConfigMaps(util.KubeNamespace).
-		Get(context.TODO(), "kubeadm-config", metav1.GetOptions{})
+		Get(context.TODO(), "kubeadm-config", metaV1.GetOptions{})
 	if err != nil {
 		log.Error(err, "Failed to get kubeadm-config configmap from remote cluster")
 		return ctrl.Result{}, err
@@ -83,7 +85,7 @@ func (r *ClusterManagerReconciler) UpdateClusterManagerStatus(ctx context.Contex
 	nodeList, err := remoteClientset.
 		CoreV1().
 		Nodes().
-		List(context.TODO(), metav1.ListOptions{})
+		List(context.TODO(), metaV1.ListOptions{})
 	if err != nil {
 		log.Error(err, "Failed to list remote K8s nodeList")
 		return ctrl.Result{}, err
@@ -159,8 +161,57 @@ func (r *ClusterManagerReconciler) UpdateClusterManagerStatus(ctx context.Contex
 	return ctrl.Result{}, nil
 }
 
+func (r *ClusterManagerReconciler) CreatePersistentVolumeClaim(ctx context.Context, clusterManager *clusterV1alpha1.ClusterManager) (ctrl.Result, error) {
+
+	// default storageClass 사용
+	storageClassName := ""
+
+	log := r.Log.WithValues("clusterclaim", clusterManager.GetNamespacedName())
+	log.Info("Start to reconcile phase for CreatePersistentVolumeClaim")
+	key := types.NamespacedName{
+		Name:      fmt.Sprintf("%s-volume-claim", clusterManager.Name),
+		Namespace: clusterManager.Namespace,
+	}
+
+	if err := r.Get(context.TODO(), key, &coreV1.PersistentVolumeClaim{}); errors.IsNotFound(err) {
+		pvc := &coreV1.PersistentVolumeClaim{
+			ObjectMeta: metaV1.ObjectMeta{
+				Name:      fmt.Sprintf("%s-volume-claim", clusterManager.Name),
+				Namespace: clusterManager.Namespace,
+				Labels: map[string]string{
+					clusterV1alpha1.LabelKeyClmName:      clusterManager.Name,
+					clusterV1alpha1.LabelKeyClmNamespace: clusterManager.Namespace,
+				},
+			},
+			Spec: coreV1.PersistentVolumeClaimSpec{
+				StorageClassName: &storageClassName,
+				AccessModes: []coreV1.PersistentVolumeAccessMode{
+					coreV1.ReadWriteOnce,
+				},
+				Resources: coreV1.ResourceRequirements{
+					Limits: coreV1.ResourceList{},
+					Requests: coreV1.ResourceList{
+						coreV1.ResourceStorage: resource.MustParse("10M"),
+					},
+				},
+			},
+		}
+		ctrl.SetControllerReference(clusterManager, pvc, r.Scheme)
+		if err := r.Create(context.TODO(), pvc); err != nil {
+			return ctrl.Result{}, err
+		}
+
+	} else if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	return ctrl.Result{}, nil
+}
+
 func (r *ClusterManagerReconciler) ProvisioningInfra(ctx context.Context, clusterManager *clusterV1alpha1.ClusterManager) (ctrl.Result, error) {
-	if clusterManager.Status.InfrastructureReady || clusterManager.Status.FailureReason != "" {
+
+	if meta.IsStatusConditionTrue(clusterManager.GetConditions(), string(clusterV1alpha1.InfrastructureProvisionedReadyCondition)) ||
+		clusterManager.Status.FailureReason != nil {
 		return ctrl.Result{}, nil
 	}
 
@@ -186,15 +237,28 @@ func (r *ClusterManagerReconciler) ProvisioningInfra(ctx context.Context, cluste
 			return ctrl.Result{}, nil
 		}
 
+		meta.SetStatusCondition(&clusterManager.Status.Conditions, metaV1.Condition{
+			Type:   string(clusterV1alpha1.InfrastructureProvisionedReadyCondition),
+			Reason: clusterV1alpha1.InfrastructureProvisioningStartedReason,
+			Status: metaV1.ConditionFalse,
+		})
+		r.Status().Update(context.TODO(), clusterManager)
+		return ctrl.Result{}, nil
+
 	} else if err != nil {
 		log.Error(err, "Failed to get provisioning infrastructure job")
 		return ctrl.Result{}, err
 	}
+
 	return ctrl.Result{}, nil
 }
 
 func (r *ClusterManagerReconciler) InstallK8s(ctx context.Context, clusterManager *clusterV1alpha1.ClusterManager) (ctrl.Result, error) {
-	if clusterManager.Status.K8sReady || !clusterManager.Status.InfrastructureReady || clusterManager.Status.FailureReason != "" {
+
+	if meta.IsStatusConditionTrue(clusterManager.GetConditions(), string(clusterV1alpha1.K8sInstalledReadyCondition)) ||
+		meta.IsStatusConditionFalse(clusterManager.GetConditions(), string(clusterV1alpha1.InfrastructureProvisionedReadyCondition)) ||
+		clusterManager.Status.FailureReason != nil {
+
 		return ctrl.Result{}, nil
 	}
 
@@ -219,6 +283,13 @@ func (r *ClusterManagerReconciler) InstallK8s(ctx context.Context, clusterManage
 			log.Error(err, "Failed to create install-k8s job")
 			return ctrl.Result{}, nil
 		}
+		meta.SetStatusCondition(&clusterManager.Status.Conditions, metaV1.Condition{
+			Type:   string(clusterV1alpha1.K8sInstalledReadyCondition),
+			Reason: clusterV1alpha1.K8sInstallingStartedReason,
+			Status: metaV1.ConditionFalse,
+		})
+		r.Status().Update(context.TODO(), clusterManager)
+		return ctrl.Result{}, nil
 
 	} else if err != nil {
 		log.Error(err, "Failed to get install-k8s job")
@@ -228,7 +299,11 @@ func (r *ClusterManagerReconciler) InstallK8s(ctx context.Context, clusterManage
 }
 
 func (r *ClusterManagerReconciler) CreateKubeconfig(ctx context.Context, clusterManager *clusterV1alpha1.ClusterManager) (ctrl.Result, error) {
-	if clusterManager.Status.KubeconfigReady || !clusterManager.Status.K8sReady || !clusterManager.Status.InfrastructureReady || clusterManager.Status.FailureReason != "" {
+
+	if meta.IsStatusConditionTrue(clusterManager.GetConditions(), string(clusterV1alpha1.KubeconfigCreatedReadyCondition)) ||
+		meta.IsStatusConditionFalse(clusterManager.GetConditions(), string(clusterV1alpha1.K8sInstalledReadyCondition)) ||
+		meta.IsStatusConditionFalse(clusterManager.GetConditions(), string(clusterV1alpha1.InfrastructureProvisionedReadyCondition)) ||
+		clusterManager.Status.FailureReason != nil {
 		return ctrl.Result{}, nil
 	}
 
@@ -253,6 +328,13 @@ func (r *ClusterManagerReconciler) CreateKubeconfig(ctx context.Context, cluster
 			log.Error(err, "Failed to create create-kubeconfig job")
 			return ctrl.Result{}, nil
 		}
+		meta.SetStatusCondition(&clusterManager.Status.Conditions, metaV1.Condition{
+			Type:   string(clusterV1alpha1.KubeconfigCreatedReadyCondition),
+			Reason: clusterV1alpha1.KubeconfigCreatingStartedReason,
+			Status: metaV1.ConditionFalse,
+		})
+		r.Status().Update(context.TODO(), clusterManager)
+		return ctrl.Result{}, nil
 
 	} else if err != nil {
 		log.Error(err, "Failed to get create-kubeconfig job")
@@ -388,7 +470,7 @@ func (r *ClusterManagerReconciler) CreateArgocdResources(ctx context.Context, cl
 	tokenSecret, err := remoteClientset.
 		CoreV1().
 		Secrets(util.KubeNamespace).
-		Get(context.TODO(), util.ArgoServiceAccountTokenSecret, metav1.GetOptions{})
+		Get(context.TODO(), util.ArgoServiceAccountTokenSecret, metaV1.GetOptions{})
 	if errors.IsNotFound(err) {
 		log.Info("Service account token secret not found. Wait for creating")
 		return ctrl.Result{RequeueAfter: requeueAfter10Second}, nil
@@ -422,7 +504,7 @@ func (r *ClusterManagerReconciler) CreateArgocdResources(ctx context.Context, cl
 	argocdClusterSecret := &coreV1.Secret{}
 	if err := r.Get(context.TODO(), key, argocdClusterSecret); errors.IsNotFound(err) {
 		argocdClusterSecret = &coreV1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
+			ObjectMeta: metaV1.ObjectMeta{
 				Name:      key.Name,
 				Namespace: key.Namespace,
 				Annotations: map[string]string{
@@ -492,7 +574,7 @@ func (r *ClusterManagerReconciler) CreateMonitoringResources(ctx context.Context
 	gatewayService, err := remoteClientset.
 		CoreV1().
 		Services(util.ApiGatewayNamespace).
-		Get(context.TODO(), "gateway", metav1.GetOptions{})
+		Get(context.TODO(), "gateway", metaV1.GetOptions{})
 	if errors.IsNotFound(err) {
 		log.Info("Cannot found Service for gateway. Wait for installing api-gateway. Requeue after 1 min")
 		return ctrl.Result{RequeueAfter: requeueAfter1Minute}, nil
@@ -655,7 +737,7 @@ func (r *ClusterManagerReconciler) SetHyperregistryOidcConfig(ctx context.Contex
 	secret, err := remoteClientset.
 		CoreV1().
 		Secrets(util.HyperregistryNamespace).
-		Get(context.TODO(), "hyperregistry-harbor-core", metav1.GetOptions{})
+		Get(context.TODO(), "hyperregistry-harbor-core", metaV1.GetOptions{})
 	if err != nil {
 		log.Error(err, "Failed to get Secret \"hyperregistry-harbor-core\"")
 		return ctrl.Result{}, err
@@ -665,7 +747,7 @@ func (r *ClusterManagerReconciler) SetHyperregistryOidcConfig(ctx context.Contex
 	ingress, err := remoteClientset.
 		NetworkingV1().
 		Ingresses(util.HyperregistryNamespace).
-		Get(context.TODO(), "hyperregistry-harbor-ingress", metav1.GetOptions{})
+		Get(context.TODO(), "hyperregistry-harbor-ingress", metaV1.GetOptions{})
 	if err != nil {
 		log.Error(err, "Failed to get Ingress \"hyperregistry-harbor-ingress\"")
 		return ctrl.Result{}, err

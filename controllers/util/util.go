@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	batchV1 "k8s.io/api/batch/v1"
+	clusterV1alpha1 "github.com/tmax-cloud/hypercloud-multi-operator/apis/cluster/v1alpha1"
 	coreV1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/kubernetes"
@@ -17,32 +17,19 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-func GetJobCondition(conditions []batchV1.JobCondition, t batchV1.JobConditionType) *batchV1.JobCondition {
-
-	if conditions == nil {
-		return nil
+func GetTerminatedPodStateReason(pod *coreV1.Pod) (string, error) {
+	if pod == nil {
+		return "", fmt.Errorf("pod doesn't exist")
 	}
-
-	for _, condition := range conditions {
-		if condition.Type == t {
-			return &condition
+	for _, containerStatus := range pod.Status.ContainerStatuses {
+		if containerStatus.Name == clusterV1alpha1.Kubespray {
+			if containerStatus.State.Terminated != nil {
+				return containerStatus.State.Terminated.Message, nil
+			}
+			return "", fmt.Errorf("not yet terminated")
 		}
 	}
-	return nil
-}
-
-func HasJobCondition(conditions []batchV1.JobCondition, t batchV1.JobConditionType) bool {
-
-	if conditions == nil {
-		return false
-	}
-
-	for _, condition := range conditions {
-		if condition.Type == t {
-			return true
-		}
-	}
-	return false
+	return "", fmt.Errorf("not found kubespray container")
 }
 
 // LowestNonZeroResult compares two reconciliation results

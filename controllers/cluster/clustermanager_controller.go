@@ -267,6 +267,7 @@ func (r *ClusterManagerReconciler) reconcile(ctx context.Context, clusterManager
 			r.ProvisioningInfra,
 			r.InstallK8s,
 			r.CreateKubeconfig,
+			r.CreatePersistentVolumeClaim,
 		)
 	} else {
 		// cluster 를 등록한 경우에만 수행
@@ -365,13 +366,13 @@ func (r *ClusterManagerReconciler) reconcileDelete(ctx context.Context, clusterM
 		dij, err := r.DestroyInfrastrucutreJob(clusterManager)
 		if err != nil {
 			log.Error(err, "Fail to create destroy job")
-			return ctrl.Result{}, err
+			return ctrl.Result{}, nil
 		}
 
 		err = r.Create(context.TODO(), dij)
 		if err != nil {
 			log.Error(err, "Fail to create destroy job")
-			return ctrl.Result{}, err
+			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{RequeueAfter: requeueAfter10Second}, nil
 
@@ -382,27 +383,19 @@ func (r *ClusterManagerReconciler) reconcileDelete(ctx context.Context, clusterM
 
 	if dij.Status.Active == 1 {
 		log.Info("Wait for cluster to be deleted")
-		return ctrl.Result{RequeueAfter: requeueAfter10Second}, nil
+		return ctrl.Result{RequeueAfter: requeueAfter30Second}, nil
 	} else if dij.Status.Failed == 1 {
 		log.Error(nil, "Fail to destroy cluster")
 		return ctrl.Result{}, nil
 	}
 
-	if err := r.DeleteExistJobs(clusterManager); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	if err := r.DeletePersistentVolumeClaim(clusterManager); err != nil {
-		return ctrl.Result{}, err
-	}
-
 	//delete handling
 	key = clusterManager.GetNamespacedName()
 	if err := r.Get(context.TODO(), key, &capiV1alpha3.Cluster{}); errors.IsNotFound(err) {
-		if err := util.Delete(clusterManager.Namespace, clusterManager.Name); err != nil {
-			log.Error(err, "Failed to delete cluster info from cluster_member table")
-			return ctrl.Result{}, err
-		}
+		// if err := util.Delete(clusterManager.Namespace, clusterManager.Name); err != nil {
+		// 	log.Error(err, "Failed to delete cluster info from cluster_member table")
+		// 	return ctrl.Result{}, err
+		// }
 		controllerutil.RemoveFinalizer(clusterManager, clusterV1alpha1.ClusterManagerFinalizer)
 		return ctrl.Result{}, nil
 	} else if err != nil {
@@ -419,9 +412,11 @@ func (r *ClusterManagerReconciler) reconcilePhase(_ context.Context, clusterMana
 		clusterManager.Status.SetTypedPhase(clusterV1alpha1.ClusterManagerPhaseProcessing)
 	}
 
-	if clusterManager.Status.FailureReason != "" {
+	if clusterManager.Status.FailureReason != nil {
 		clusterManager.Status.SetTypedPhase(clusterV1alpha1.ClusterManagerPhaseFailed)
 		return
+	} else {
+		clusterManager.Status.SetTypedPhase(clusterV1alpha1.ClusterManagerPhaseProcessing)
 	}
 
 	if clusterManager.Status.ArgoReady {

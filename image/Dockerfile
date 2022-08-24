@@ -1,4 +1,3 @@
-# FROM ubuntu:20.04
 FROM alpine:3.15.5
 
 ENV TF_VERSION 0.14.3
@@ -11,7 +10,6 @@ ENV DEBIAN_FRONTEND noninteractive
 
 # 필요 패키지 설치 
 RUN apk --no-cache --update-cache add \
-    #   libressl openssh-client sshpass python3 py3-pip
     libressl openssh-client sshpass python3 ca-certificates
 
 # terraform binary install
@@ -34,7 +32,6 @@ WORKDIR kubespray
 
 # script file 추가 
 COPY setting.sh .
-COPY execute.sh .
 COPY provision.sh .
 COPY destroy.sh .
 COPY install.sh .
@@ -45,10 +42,5 @@ RUN apk --no-cache --update-cache --virtual .build-deps add \
     && pip3 install -r requirements.txt \
     && apk del .build-deps
 
-# terraform init 포함
+# terraform init
 RUN terraform -chdir=/kubespray/contrib/terraform/aws/ init
-# RUN apk add upx \
-#     && upx /usr/local/bin/terraform \
-#     && upx /usr/bin/
-
-# 특이사항

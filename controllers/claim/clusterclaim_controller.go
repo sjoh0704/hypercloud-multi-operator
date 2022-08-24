@@ -102,7 +102,6 @@ func (r *ClusterClaimReconciler) reconcile(ctx context.Context, clusterClaim *cl
 	phases = append(
 		phases,
 		r.CreateClusterManager,
-		r.CreatePersistentVolumeClaim,
 	)
 
 	res := ctrl.Result{}

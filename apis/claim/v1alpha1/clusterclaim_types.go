@@ -69,16 +69,16 @@ type AwsClaimSpec struct {
 	Region string `json:"region,omitempty"`
 	// The info of bastion instance
 	Bastion Instance `json:"bastion,omitempty"`
-	// The info of master instance 
+	// The info of master instance
 	Master Instance `json:"master,omitempty"`
-	// The info of worker instance 
+	// The info of worker instance
 	Worker Instance `json:"worker,omitempty"`
 	// +kubebuilder:validation:Enum:=rhel;ubuntu;
-	// The type of OS that instances(master, worker, bastion) use 
+	// The type of OS that instances(master, worker, bastion) use
 	HostOS string `json:"hostOs,omitempty"`
 	// The network spec that cluster uses
 	NetworkSpec NetworkSpec `json:"networkSpec,omitempty"`
-	// The additional tag attached to aws resources 
+	// The additional tag attached to aws resources
 	AdditionalTags map[string]string `json:"additionalTags,omitempty"`
 }
 
@@ -92,12 +92,12 @@ type Instance struct {
 }
 
 type NetworkSpec struct {
-	// The size of the vpc to which the cluster will be deployed  
-	VpcCidrBlock           string   `json:"vpcCidrBlock,omitempty"`
+	// The size of the vpc to which the cluster will be deployed
+	VpcCidrBlock string `json:"vpcCidrBlock,omitempty"`
 	// The size of private subnet belonging to vpc cidr
 	PrivateSubnetCidrBlock []string `json:"privateSubnetCidrBlock,omitempty"`
 	// The size of public subnet belonging to vpc cidr
-	PublicSubnetCidrBlock  []string `json:"publicSubnetCidrBlock,omitempty"`
+	PublicSubnetCidrBlock []string `json:"publicSubnetCidrBlock,omitempty"`
 }
 
 type VsphereClaimSpec struct {

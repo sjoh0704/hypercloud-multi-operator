@@ -3,7 +3,6 @@ echo "setup starts"
 
 HOST_FILE_PATH=/kubespray/inventory/tmaxcloud/hosts
 VAR_PATH=/kubespray/inventory/tmaxcloud/group_vars
-
 ELB_FILE_PATH=$VAR_PATH/all/all.yml
 EFS_FILE_PATH=$VAR_PATH/k8s_cluster/addons.yml
 CALICO_FILE_PATH=$VAR_PATH/k8s_cluster/k8s-net-calico.yml

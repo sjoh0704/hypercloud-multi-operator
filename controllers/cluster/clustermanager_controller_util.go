@@ -38,47 +38,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-func (r *ClusterManagerReconciler) DeletePersistentVolumeClaim(clusterManager *clusterV1alpha1.ClusterManager) error {
-	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
-
-	key := types.NamespacedName{
-		Name:      fmt.Sprintf("%s-volume-claim", clusterManager.Name),
-		Namespace: clusterManager.Namespace,
-	}
-
-	pvc := &coreV1.PersistentVolumeClaim{}
-	if err := r.Get(context.TODO(), key, pvc); errors.IsNotFound(err) {
-		log.Info("Deleted persistent volume claim already")
-		return nil
-	} else if err != nil {
-		return err
-	}
-
-	if err := r.Delete(context.TODO(), pvc); err != nil {
-		return err
-	}
-	log.Info("Deleted persistent volume claim")
-	return nil
-}
-
-func (r *ClusterManagerReconciler) DeleteExistJobs(clusterManager *clusterV1alpha1.ClusterManager) error {
-	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
-	jobList := &batchv1.JobList{}
-	if err := r.List(context.TODO(), jobList); err != nil {
-		return err
-	}
-	for _, job := range jobList.Items {
-		if job.Labels[clusterV1alpha1.LabelKeyClmName] == clusterManager.Name && job.Labels[clusterV1alpha1.LabelKeyClmNamespace] == clusterManager.Namespace {
-			err := r.Delete(context.TODO(), &job)
-			if err != nil {
-				return fmt.Errorf("Failed to delete job")
-			}
-		}
-	}
-	log.Info("Deleted jobs that existed")
-	return nil
-}
-
 func CreateEnvFromClustermanagerSpec(clusterManager *clusterV1alpha1.ClusterManager) ([]coreV1.EnvVar, error) {
 	EnvList := []coreV1.EnvVar{}
 	AwsSpec := clusterManager.AwsSpec
@@ -262,8 +221,8 @@ func (r *ClusterManagerReconciler) DestroyInfrastrucutreJob(clusterManager *clus
 				Spec: coreV1.PodSpec{
 					Containers: []coreV1.Container{
 						{
-							Name:    "destroy-infrastructure",
-							Image:   "kubespray:test",
+							Name:    clusterV1alpha1.Kubespray,
+							Image:   clusterV1alpha1.KubesprayImage,
 							Command: []string{"/bin/sh", "-c"},
 							Args:    []string{"./destroy.sh 2> /dev/termination-log;"},
 							Env:     envList,
@@ -307,6 +266,8 @@ func (r *ClusterManagerReconciler) DestroyInfrastrucutreJob(clusterManager *clus
 			BackoffLimit: &backoffLimit,
 		},
 	}
+
+	ctrl.SetControllerReference(clusterManager, destroyInfrastrucutreJob, r.Scheme)
 	return destroyInfrastrucutreJob, nil
 }
 
@@ -314,13 +275,10 @@ func (r *ClusterManagerReconciler) CreateKubeconfigJob(clusterManager *clusterV1
 	var backoffLimit int32 = 0
 	var serviceAutoMount bool = true
 
-	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
-	envList, err := CreateEnvFromClustermanagerSpec(clusterManager)
-	if err != nil {
-		log.Error(err, "Failed to create envList from cluster manager spec")
-	}
+	DeleteExistSecretCommand := fmt.Sprintf("kubectl -n %s delete secret %s%s", clusterManager.Namespace, clusterManager.Name, util.KubeconfigSuffix)
+	CreateNewSecretCommand := fmt.Sprintf("kubectl -n %s create secret generic %s%s --from-file=value=/context/admin.conf 2> /dev/termination-log;", clusterManager.Namespace, clusterManager.Name, util.KubeconfigSuffix)
 
-	installK8sJob := &batchv1.Job{
+	createKubeconfigJob := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-create-kubeconfig", clusterManager.Name),
 			Namespace: clusterManager.Namespace,
@@ -339,11 +297,10 @@ func (r *ClusterManagerReconciler) CreateKubeconfigJob(clusterManager *clusterV1
 					AutomountServiceAccountToken: &serviceAutoMount,
 					Containers: []coreV1.Container{
 						{
-							Name:    "create-kubeconfig",
-							Image:   "bitnami/kubectl:latest",
+							Name:    clusterV1alpha1.Kubespray,
+							Image:   clusterV1alpha1.KubectlImage,
 							Command: []string{"/bin/sh", "-c"},
-							Args:    []string{fmt.Sprintf("kubectl -n %s create secret generic %s-%s --from-file=value=/context/admin.conf 2> /dev/termination-log;", clusterManager.Namespace, clusterManager.Name, util.KubeconfigSuffix)},
-							Env:     envList,
+							Args:    []string{DeleteExistSecretCommand + "&&" + CreateNewSecretCommand},
 							VolumeMounts: []coreV1.VolumeMount{
 								{
 									Name:      "kubespray-context",
@@ -368,8 +325,8 @@ func (r *ClusterManagerReconciler) CreateKubeconfigJob(clusterManager *clusterV1
 			BackoffLimit: &backoffLimit,
 		},
 	}
-
-	return installK8sJob, nil
+	ctrl.SetControllerReference(clusterManager, createKubeconfigJob, r.Scheme)
+	return createKubeconfigJob, nil
 }
 
 func (r *ClusterManagerReconciler) InstallK8sJob(clusterManager *clusterV1alpha1.ClusterManager) (*batchv1.Job, error) {
@@ -399,8 +356,8 @@ func (r *ClusterManagerReconciler) InstallK8sJob(clusterManager *clusterV1alpha1
 				Spec: coreV1.PodSpec{
 					Containers: []coreV1.Container{
 						{
-							Name:    "install-k8s",
-							Image:   "kubespray:test",
+							Name:    clusterV1alpha1.Kubespray,
+							Image:   clusterV1alpha1.KubesprayImage,
 							Command: []string{"/bin/sh", "-c"},
 							Args:    []string{"./install.sh 2> /dev/termination-log;"},
 							Env:     envList,
@@ -442,6 +399,7 @@ func (r *ClusterManagerReconciler) InstallK8sJob(clusterManager *clusterV1alpha1
 			BackoffLimit: &backoffLimit,
 		},
 	}
+	ctrl.SetControllerReference(clusterManager, installK8sJob, r.Scheme)
 
 	return installK8sJob, nil
 }
@@ -471,8 +429,8 @@ func (r *ClusterManagerReconciler) ProvisioningInfrastrucutreJob(clusterManager 
 				Spec: coreV1.PodSpec{
 					Containers: []coreV1.Container{
 						{
-							Name:    "provisioning-infrastructure",
-							Image:   "kubespray:test",
+							Name:    clusterV1alpha1.Kubespray,
+							Image:   clusterV1alpha1.KubesprayImage,
 							Command: []string{"/bin/sh", "-c"},
 							Args:    []string{"./provision.sh 2> /dev/termination-log;"},
 							Env:     envList,
@@ -516,7 +474,7 @@ func (r *ClusterManagerReconciler) ProvisioningInfrastrucutreJob(clusterManager 
 			BackoffLimit: &backoffLimit,
 		},
 	}
-
+	ctrl.SetControllerReference(clusterManager, provisioningInfrastrucutreJob, r.Scheme)
 	return provisioningInfrastrucutreJob, nil
 }
 

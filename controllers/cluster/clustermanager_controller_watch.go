@@ -21,9 +21,11 @@ import (
 
 	clusterV1alpha1 "github.com/tmax-cloud/hypercloud-multi-operator/apis/cluster/v1alpha1"
 	"github.com/tmax-cloud/hypercloud-multi-operator/controllers/util"
-
 	batchV1 "k8s.io/api/batch/v1"
+	coreV1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	capiV1alpha3 "sigs.k8s.io/cluster-api/api/v1alpha3"
 	controlplanev1 "sigs.k8s.io/cluster-api/controlplane/kubeadm/api/v1alpha3"
@@ -66,32 +68,56 @@ func (r *ClusterManagerReconciler) requeueClusterManagersForJob(o client.Object)
 	}()
 
 	if job.Status.Failed == 1 {
-		err := ""
-		if util.HasJobCondition(job.Status.Conditions, batchV1.JobSuspended) {
-			condition := util.GetJobCondition(job.Status.Conditions, batchV1.JobSuspended)
-			err += condition.Message
+		podList := &coreV1.PodList{}
+		listOpts := []client.ListOption{
+			client.InNamespace(job.Namespace),
+			client.MatchingLabels(map[string]string{
+				"job-name": job.Name,
+			}),
 		}
-		if util.HasJobCondition(job.Status.Conditions, batchV1.JobFailed) {
-			condition := util.GetJobCondition(job.Status.Conditions, batchV1.JobFailed)
-			err += condition.Message
+		if err := r.List(context.TODO(), podList, listOpts...); err != nil {
+			log.Error(err, "Failed to list pods")
+			return nil
+		}
+		if len(podList.Items) > 1 {
+			log.Error(fmt.Errorf("pod cannot exist more than one"), "Failed to reconcile job")
+			return nil
+		}
+
+		failedReason, err := util.GetTerminatedPodStateReason(&podList.Items[0])
+		if err != nil {
+			log.Error(err, "Failed to reconcile job")
+			return nil
 		}
 
 		if job.Annotations[clusterV1alpha1.AnnotationKeyJobType] == clusterV1alpha1.ProvisioningInfrastrucutre {
-			clm.Status.InfrastructureReady = false
-			log.Error(fmt.Errorf(err), "Failed to provision infrastructure")
+			meta.SetStatusCondition(&clm.Status.Conditions, metaV1.Condition{
+				Type:   string(clusterV1alpha1.InfrastructureProvisionedReadyCondition),
+				Reason: clusterV1alpha1.InfrastructureProvisioningReconciliationFailedReason,
+				Status: metaV1.ConditionFalse,
+			})
+			log.Error(fmt.Errorf(failedReason), "Failed to provision infrastructure")
 
 		} else if job.Annotations[clusterV1alpha1.AnnotationKeyJobType] == clusterV1alpha1.InstallingK8s {
-			clm.Status.K8sReady = false
-			log.Error(fmt.Errorf(err), "Failed to install k8s")
+			meta.SetStatusCondition(&clm.Status.Conditions, metaV1.Condition{
+				Type:   string(clusterV1alpha1.K8sInstalledReadyCondition),
+				Reason: clusterV1alpha1.K8sInstallingReconciliationFailedReason,
+				Status: metaV1.ConditionFalse,
+			})
+			log.Error(fmt.Errorf(failedReason), "Failed to install k8s")
 
 		} else if job.Annotations[clusterV1alpha1.AnnotationKeyJobType] == clusterV1alpha1.CreatingKubeconfig {
-			clm.Status.KubeconfigReady = false
-			log.Error(fmt.Errorf(err), "Failed to create kubeconfig")
+			meta.SetStatusCondition(&clm.Status.Conditions, metaV1.Condition{
+				Type:   string(clusterV1alpha1.KubeconfigCreatedReadyCondition),
+				Reason: clusterV1alpha1.KubeconfigCreatingReconciliationFailedReason,
+				Status: metaV1.ConditionFalse,
+			})
+			log.Error(fmt.Errorf(failedReason), "Failed to create kubeconfig")
 		} else {
 			return nil
 		}
 
-		clm.Status.FailureReason = err
+		clm.Status.FailureReason = &failedReason
 
 		return []ctrl.Request{
 			{
@@ -102,21 +128,32 @@ func (r *ClusterManagerReconciler) requeueClusterManagersForJob(o client.Object)
 	} else if job.Status.Succeeded == 1 {
 
 		if job.Annotations[clusterV1alpha1.AnnotationKeyJobType] == clusterV1alpha1.ProvisioningInfrastrucutre {
-			clm.Status.InfrastructureReady = true
+			meta.SetStatusCondition(&clm.Status.Conditions, metaV1.Condition{
+				Type:   string(clusterV1alpha1.InfrastructureProvisionedReadyCondition),
+				Reason: clusterV1alpha1.InfrastructureProvisioningReconciliationSucceededReason,
+				Status: metaV1.ConditionTrue,
+			})
 			log.Info("Created infrastructure")
 
 		} else if job.Annotations[clusterV1alpha1.AnnotationKeyJobType] == clusterV1alpha1.InstallingK8s {
-			clm.Status.K8sReady = true
+			meta.SetStatusCondition(&clm.Status.Conditions, metaV1.Condition{
+				Type:   string(clusterV1alpha1.K8sInstalledReadyCondition),
+				Reason: clusterV1alpha1.K8sInstallingReconciliationSucceededReason,
+				Status: metaV1.ConditionTrue,
+			})
 			log.Info("Installed k8s")
 
 		} else if job.Annotations[clusterV1alpha1.AnnotationKeyJobType] == clusterV1alpha1.CreatingKubeconfig {
-			clm.Status.KubeconfigReady = true
+			meta.SetStatusCondition(&clm.Status.Conditions, metaV1.Condition{
+				Type:   string(clusterV1alpha1.KubeconfigCreatedReadyCondition),
+				Reason: clusterV1alpha1.KubeconfigCreatingReconciliationSucceededReason,
+				Status: metaV1.ConditionTrue,
+			})
 			log.Info("Created kubeconfig")
 		} else {
 			return nil
 		}
-		clm.Status.FailureReason = ""
-
+		clm.Status.FailureReason = nil
 		return []ctrl.Request{
 			{
 				NamespacedName: clm.GetNamespacedName(),
