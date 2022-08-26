@@ -255,7 +255,7 @@ func (r *ClusterManagerReconciler) DestroyInfrastrucutreJob(clusterManager *clus
 							Name: "kubespray-context",
 							VolumeSource: coreV1.VolumeSource{
 								PersistentVolumeClaim: &coreV1.PersistentVolumeClaimVolumeSource{
-									ClaimName: "kubespray-pvc",
+									ClaimName: fmt.Sprintf("%s-volume-claim", clusterManager.Name),
 								},
 							},
 						},
@@ -314,7 +314,7 @@ func (r *ClusterManagerReconciler) CreateKubeconfigJob(clusterManager *clusterV1
 							Name: "kubespray-context",
 							VolumeSource: coreV1.VolumeSource{
 								PersistentVolumeClaim: &coreV1.PersistentVolumeClaimVolumeSource{
-									ClaimName: "kubespray-pvc",
+									ClaimName: fmt.Sprintf("%s-volume-claim", clusterManager.Name),
 								},
 							},
 						},
@@ -379,7 +379,7 @@ func (r *ClusterManagerReconciler) InstallK8sJob(clusterManager *clusterV1alpha1
 							Name: "kubespray-context",
 							VolumeSource: coreV1.VolumeSource{
 								PersistentVolumeClaim: &coreV1.PersistentVolumeClaimVolumeSource{
-									ClaimName: "kubespray-pvc",
+									ClaimName: fmt.Sprintf("%s-volume-claim", clusterManager.Name),
 								},
 							},
 						},
@@ -463,7 +463,7 @@ func (r *ClusterManagerReconciler) ProvisioningInfrastrucutreJob(clusterManager 
 							Name: "kubespray-context",
 							VolumeSource: coreV1.VolumeSource{
 								PersistentVolumeClaim: &coreV1.PersistentVolumeClaimVolumeSource{
-									ClaimName: "kubespray-pvc",
+									ClaimName: fmt.Sprintf("%s-volume-claim", clusterManager.Name),
 								},
 							},
 						},

@@ -163,38 +163,6 @@ func (r *ClusterManagerReconciler) requeueClusterManagersForJob(o client.Object)
 	return nil
 }
 
-func (r *ClusterManagerReconciler) requeueClusterManagersForCluster(o client.Object) []ctrl.Request {
-	c := o.DeepCopyObject().(*capiV1alpha3.Cluster)
-	log := r.Log.WithValues("objectMapper", "clusterToClusterManager", "namespace", c.Namespace, c.Kind, c.Name)
-	log.Info("Start to requeueClusterManagersForCluster mapping...")
-
-	//get ClusterManager
-	key := types.NamespacedName{
-		Name:      c.Name,
-		Namespace: c.Namespace,
-	}
-	clm := &clusterV1alpha1.ClusterManager{}
-	if err := r.Get(context.TODO(), key, clm); errors.IsNotFound(err) {
-		log.Info("ClusterManager resource not found. Ignoring since object must be deleted")
-		return nil
-	} else if err != nil {
-		log.Error(err, "Failed to get ClusterManager")
-		return nil
-	}
-
-	//create helper for patch
-	helper, _ := patch.NewHelper(clm, r.Client)
-	defer func() {
-		if err := helper.Patch(context.TODO(), clm); err != nil {
-			log.Error(err, "ClusterManager patch error")
-		}
-	}()
-	// clm.Status.SetTypedPhase(clusterV1alpha1.ClusterManagerPhaseProvisioned)
-	// clm.Status.ControlPlaneReady = c.Status.ControlPlaneInitialized
-
-	return nil
-}
-
 func (r *ClusterManagerReconciler) requeueClusterManagersForKubeadmControlPlane(o client.Object) []ctrl.Request {
 	cp := o.DeepCopyObject().(*controlplanev1.KubeadmControlPlane)
 	log := r.Log.WithValues("objectMapper", "kubeadmControlPlaneToClusterManagers", "namespace", cp.Namespace, cp.Kind, cp.Name)

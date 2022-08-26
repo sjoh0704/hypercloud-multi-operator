@@ -161,12 +161,80 @@ func (r *ClusterManagerReconciler) UpdateClusterManagerStatus(ctx context.Contex
 	return ctrl.Result{}, nil
 }
 
+func (r *ClusterManagerReconciler) ChangeVolumeReclaimPolicy(ctx context.Context, clusterManager *clusterV1alpha1.ClusterManager) (ctrl.Result, error) {
+	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
+	log.Info("Start to reconcile phase for ChangeVolumeReclaimPolicy")
+
+	key := types.NamespacedName{
+		Name:      fmt.Sprintf("%s-volume-claim", clusterManager.Name),
+		Namespace: clusterManager.Namespace,
+	}
+	pvc := &coreV1.PersistentVolumeClaim{}
+
+	if err := r.Get(context.TODO(), key, pvc); errors.IsNotFound(err) {
+		log.Info("Waiting for creating persistent volume claim")
+		return ctrl.Result{}, err
+	} else if err != nil {
+		log.Error(err, "Failed to get persistent volume claim")
+		return ctrl.Result{}, err
+	}
+
+	meta.SetStatusCondition(&clusterManager.Status.Conditions, metaV1.Condition{
+		Type:   string(clusterV1alpha1.VolumeReadyCondition),
+		Reason: clusterV1alpha1.VolumeSettingStartedReason,
+		Status: metaV1.ConditionFalse,
+	})
+
+	if pvc.Spec.VolumeName == "" {
+		log.Info("Waiting for creating persistent volume")
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	key = types.NamespacedName{
+		Name: pvc.Spec.VolumeName,
+	}
+	pv := &coreV1.PersistentVolume{}
+	if err := r.Get(context.TODO(), key, pv); errors.IsNotFound(err) {
+		log.Info("Waiting for creating persistent volume")
+		return ctrl.Result{}, err
+	} else if err != nil {
+		log.Error(err, "Failed to get persistent volume")
+		return ctrl.Result{}, err
+	}
+
+	if pv.Spec.PersistentVolumeReclaimPolicy != coreV1.PersistentVolumeReclaimRetain {
+		pv.Spec.PersistentVolumeReclaimPolicy = coreV1.PersistentVolumeReclaimRetain
+	}
+
+	if pv.Spec.ClaimRef != nil && pv.Spec.ClaimRef.ResourceVersion != "" {
+		pv.Spec.ClaimRef.ResourceVersion = ""
+	}
+
+	if err := r.Update(context.TODO(), pv); err != nil {
+		log.Error(err, "Failed to update persistent volume")
+		meta.SetStatusCondition(&clusterManager.Status.Conditions, metaV1.Condition{
+			Type:   string(clusterV1alpha1.VolumeReadyCondition),
+			Reason: clusterV1alpha1.VolumeSettingReconciliationFailedReason,
+			Status: metaV1.ConditionFalse,
+		})
+		return ctrl.Result{}, err
+	}
+
+	meta.SetStatusCondition(&clusterManager.Status.Conditions, metaV1.Condition{
+		Type:   string(clusterV1alpha1.VolumeReadyCondition),
+		Reason: clusterV1alpha1.VolumeSettingReconciliationSucceededReason,
+		Status: metaV1.ConditionTrue,
+	})
+
+	return ctrl.Result{}, nil
+}
+
 func (r *ClusterManagerReconciler) CreatePersistentVolumeClaim(ctx context.Context, clusterManager *clusterV1alpha1.ClusterManager) (ctrl.Result, error) {
+	if meta.FindStatusCondition(clusterManager.GetConditions(), string(clusterV1alpha1.VolumeReadyCondition)) != nil {
+		return ctrl.Result{}, nil
+	}
 
-	// default storageClass 사용
-	storageClassName := ""
-
-	log := r.Log.WithValues("clusterclaim", clusterManager.GetNamespacedName())
+	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
 	log.Info("Start to reconcile phase for CreatePersistentVolumeClaim")
 	key := types.NamespacedName{
 		Name:      fmt.Sprintf("%s-volume-claim", clusterManager.Name),
@@ -184,7 +252,6 @@ func (r *ClusterManagerReconciler) CreatePersistentVolumeClaim(ctx context.Conte
 				},
 			},
 			Spec: coreV1.PersistentVolumeClaimSpec{
-				StorageClassName: &storageClassName,
 				AccessModes: []coreV1.PersistentVolumeAccessMode{
 					coreV1.ReadWriteOnce,
 				},
@@ -228,7 +295,7 @@ func (r *ClusterManagerReconciler) ProvisioningInfra(ctx context.Context, cluste
 		pij, err := r.ProvisioningInfrastrucutreJob(clusterManager)
 
 		if err != nil {
-			log.Error(err, "Failed to create provisioning infrastructure job")
+			log.Error(err, "Failed to create provisioning-infrastructure job")
 			return ctrl.Result{}, nil
 		}
 

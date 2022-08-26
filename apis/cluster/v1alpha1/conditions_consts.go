@@ -22,6 +22,7 @@ const (
 	K8sInstalledReadyCondition              ConditionType = "K8sInstalledReady"
 	InfrastructureProvisionedReadyCondition ConditionType = "InfrastructureProvisionedReady"
 	KubeconfigCreatedReadyCondition         ConditionType = "KubeconfigCreatedReady"
+	VolumeReadyCondition                    ConditionType = "VolumeReady"
 )
 
 const (
@@ -40,4 +41,10 @@ const (
 	KubeconfigCreatingStartedReason                 = "KubeconfigCreatingStarted"
 	KubeconfigCreatingReconciliationFailedReason    = "KubeconfigCreatingReconciliationFailed"
 	KubeconfigCreatingReconciliationSucceededReason = "KubeconfigCreatingReconciliationSucceeded"
+)
+
+const (
+	VolumeSettingStartedReason                 = "VolumeSettingStarted"
+	VolumeSettingReconciliationFailedReason    = "VolumeSettingReconciliationFailed"
+	VolumeSettingReconciliationSucceededReason = "VolumeSettingReconciliationSucceeded"
 )
