@@ -66,44 +66,57 @@ spec:
                   additionalTags:
                     additionalProperties:
                       type: string
+                    description: The additional tag attached to aws resources
                     type: object
                   bastion:
+                    description: The info of bastion instance
                     properties:
                       diskSize:
-                        description: InstanceDiskSize
+                        description: The disk size of the instance
                         type: integer
                       num:
-                        description: InstanceNum
+                        description: The number of instance
                         type: integer
                       type:
-                        description: InstanceType
+                        description: Indicates the size of the instance
                         type: string
                     type: object
                   hostOs:
+                    description: The type of OS that instances(master, worker, bastion)
+                      use
+                    enum:
+                    - rhel
+                    - ubuntu
                     type: string
                   master:
+                    description: The info of master instance
                     properties:
                       diskSize:
-                        description: InstanceDiskSize
+                        description: The disk size of the instance
                         type: integer
                       num:
-                        description: InstanceNum
+                        description: The number of instance
                         type: integer
                       type:
-                        description: InstanceType
+                        description: Indicates the size of the instance
                         type: string
                     type: object
                   networkSpec:
+                    description: The network spec that cluster uses
                     properties:
                       privateSubnetCidrBlock:
+                        description: The size of private subnet belonging to vpc cidr
                         items:
                           type: string
                         type: array
                       publicSubnetCidrBlock:
+                        description: The size of public subnet belonging to vpc cidr
                         items:
                           type: string
                         type: array
                       vpcCidrBlock:
+                        description: The size of the vpc to which the cluster will
+                          be deployed
                         type: string
                     type: object
                   region:
@@ -127,15 +140,16 @@ spec:
                     - us-west-2
                     type: string
                   worker:
+                    description: The info of worker instance
                     properties:
                       diskSize:
-                        description: InstanceDiskSize
+                        description: The disk size of the instance
                         type: integer
                       num:
-                        description: InstanceNum
+                        description: The number of instance
                         type: integer
                       type:
-                        description: InstanceType
+                        description: Indicates the size of the instance
                         type: string
                     type: object
                 type: object

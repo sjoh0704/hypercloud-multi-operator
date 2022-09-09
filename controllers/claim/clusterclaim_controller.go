@@ -59,8 +59,6 @@ type ClusterClaimReconciler struct {
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=cluster.tmax.io,resources=clustermanagers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=cluster.tmax.io,resources=clustermanagers/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups="",resources=persistentvolumes,verbs=get;list;watch;create;update;patch;delete
 
 // cluster claim 이 생성되면, reconcile 함수는 해당 cluster claim 의 status 를 awaiting 으로 변경해준다.
 // 해당 claim 으로 생성한 cluster 에 대한 cluster manager 의 생성은 hypercloud-api-server 에서 진행된다.
@@ -102,7 +100,6 @@ func (r *ClusterClaimReconciler) reconcile(ctx context.Context, clusterClaim *cl
 	phases = append(
 		phases,
 		r.CreateClusterManager,
-		r.CreatePersistentVolumeClaim,
 	)
 
 	res := ctrl.Result{}

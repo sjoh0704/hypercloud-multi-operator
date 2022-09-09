@@ -114,6 +114,8 @@ type ClusterManagerReconciler struct {
 // +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=create;delete;get;list;patch;update;watch
 // +kubebuilder:rbac:groups=argoproj.io,resources=applications,verbs=create;delete;get;list;patch;update;watch
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=create;delete;get;list;patch;update;watch
+// +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=persistentvolumes,verbs=get;list;watch;create;update;patch;delete
 
 func (r *ClusterManagerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 	_ = context.Background()
@@ -267,6 +269,8 @@ func (r *ClusterManagerReconciler) reconcile(ctx context.Context, clusterManager
 			r.ProvisioningInfra,
 			r.InstallK8s,
 			r.CreateKubeconfig,
+			r.CreatePersistentVolumeClaim,
+			r.ChangeVolumeReclaimPolicy,
 		)
 	} else {
 		// cluster 를 등록한 경우에만 수행
@@ -278,22 +282,22 @@ func (r *ClusterManagerReconciler) reconcile(ctx context.Context, clusterManager
 		phases = append(phases, r.UpdateClusterManagerStatus)
 	}
 	// 공통적으로 수행
-	phases = append(
-		phases,
-		// Argocd 연동을 위해 필요한 정보를 kube-config 로 부터 가져와 secret 을 생성한다.
-		r.CreateArgocdResources,
-		// single cluster 의 api gateway service 의 주소로 gateway service 생성
-		r.CreateMonitoringResources,
-		// Kibana, Grafana, Kiali 등 모듈과 hyperauth oidc 연동을 위한 client 생성 작업 (hyperauth 계정정보로 여러 모듈에 로그인 가능)
-		// hyperauth caller 를 통해 admin token 을 가져와 각 모듈 마다 hyperauth client 를 생성후, 모듈에 따른 role 을 추가한다.
-		r.CreateHyperauthClient,
-		// hyperregistry domain 을 single cluster 의 ingress 로 부터 가져와 oidc 연동설정
-		r.SetHyperregistryOidcConfig,
-		// Traefik 을 통하기 위한 리소스인 certificate, ingress, middleware 를 생성한다.
-		// 콘솔에서 ingress를 조회하여 LNB에 cluster를 listing 해주므로 cluster가 완전히 join되고 나서
-		// 리스팅 될 수 있게 해당 프로세스를 가장 마지막에 수행한다.
-		r.CreateTraefikResources,
-	)
+	// phases = append(
+	// 	phases,
+	// 	// Argocd 연동을 위해 필요한 정보를 kube-config 로 부터 가져와 secret 을 생성한다.
+	// 	r.CreateArgocdResources,
+	// 	// single cluster 의 api gateway service 의 주소로 gateway service 생성
+	// 	r.CreateMonitoringResources,
+	// 	// Kibana, Grafana, Kiali 등 모듈과 hyperauth oidc 연동을 위한 client 생성 작업 (hyperauth 계정정보로 여러 모듈에 로그인 가능)
+	// 	// hyperauth caller 를 통해 admin token 을 가져와 각 모듈 마다 hyperauth client 를 생성후, 모듈에 따른 role 을 추가한다.
+	// 	r.CreateHyperauthClient,
+	// 	// hyperregistry domain 을 single cluster 의 ingress 로 부터 가져와 oidc 연동설정
+	// 	r.SetHyperregistryOidcConfig,
+	// 	// Traefik 을 통하기 위한 리소스인 certificate, ingress, middleware 를 생성한다.
+	// 	// 콘솔에서 ingress를 조회하여 LNB에 cluster를 listing 해주므로 cluster가 완전히 join되고 나서
+	// 	// 리스팅 될 수 있게 해당 프로세스를 가장 마지막에 수행한다.
+	// 	r.CreateTraefikResources,
+	// )
 
 	res := ctrl.Result{}
 	errs := []error{}
@@ -365,13 +369,13 @@ func (r *ClusterManagerReconciler) reconcileDelete(ctx context.Context, clusterM
 		dij, err := r.DestroyInfrastrucutreJob(clusterManager)
 		if err != nil {
 			log.Error(err, "Fail to create destroy job")
-			return ctrl.Result{}, err
+			return ctrl.Result{}, nil
 		}
 
 		err = r.Create(context.TODO(), dij)
 		if err != nil {
 			log.Error(err, "Fail to create destroy job")
-			return ctrl.Result{}, err
+			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{RequeueAfter: requeueAfter10Second}, nil
 
@@ -382,18 +386,10 @@ func (r *ClusterManagerReconciler) reconcileDelete(ctx context.Context, clusterM
 
 	if dij.Status.Active == 1 {
 		log.Info("Wait for cluster to be deleted")
-		return ctrl.Result{RequeueAfter: requeueAfter10Second}, nil
+		return ctrl.Result{RequeueAfter: requeueAfter30Second}, nil
 	} else if dij.Status.Failed == 1 {
 		log.Error(nil, "Fail to destroy cluster")
 		return ctrl.Result{}, nil
-	}
-
-	if err := r.DeleteExistJobs(clusterManager); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	if err := r.DeletePersistentVolumeClaim(clusterManager); err != nil {
-		return ctrl.Result{}, err
 	}
 
 	//delete handling
@@ -419,7 +415,14 @@ func (r *ClusterManagerReconciler) reconcilePhase(_ context.Context, clusterMana
 		clusterManager.Status.SetTypedPhase(clusterV1alpha1.ClusterManagerPhaseProcessing)
 	}
 
-	if clusterManager.Status.FailureReason != "" {
+	if clusterManager.Status.FailureReason != nil {
+		clusterManager.Status.SetTypedPhase(clusterV1alpha1.ClusterManagerPhaseFailed)
+		return
+	} else {
+		clusterManager.Status.SetTypedPhase(clusterV1alpha1.ClusterManagerPhaseProcessing)
+	}
+
+	if clusterManager.Status.FailureReason != nil {
 		clusterManager.Status.SetTypedPhase(clusterV1alpha1.ClusterManagerPhaseFailed)
 		return
 	}
@@ -512,72 +515,6 @@ func (r *ClusterManagerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			},
 		},
 	)
-
-	// controller.Watch(
-	// 	&source.Kind{Type: &capiV1alpha3.Cluster{}},
-	// 	handler.EnqueueRequestsFromMapFunc(r.requeueClusterManagersForCluster),
-	// 	predicate.Funcs{
-	// 		UpdateFunc: func(e event.UpdateEvent) bool {
-	// 			oldc := e.ObjectOld.(*capiV1alpha3.Cluster)
-	// 			newc := e.ObjectNew.(*capiV1alpha3.Cluster)
-
-	// 			return !oldc.Status.ControlPlaneInitialized && newc.Status.ControlPlaneInitialized
-	// 		},
-	// 		CreateFunc: func(e event.CreateEvent) bool {
-	// 			return false
-	// 		},
-	// 		DeleteFunc: func(e event.DeleteEvent) bool {
-	// 			return true
-	// 		},
-	// 		GenericFunc: func(e event.GenericEvent) bool {
-	// 			return false
-	// 		},
-	// 	},
-	// )
-
-	// controller.Watch(
-	// 	&source.Kind{Type: &controlplanev1.KubeadmControlPlane{}},
-	// 	handler.EnqueueRequestsFromMapFunc(r.requeueClusterManagersForKubeadmControlPlane),
-	// 	predicate.Funcs{
-	// 		UpdateFunc: func(e event.UpdateEvent) bool {
-	// 			oldKcp := e.ObjectOld.(*controlplanev1.KubeadmControlPlane)
-	// 			newKcp := e.ObjectNew.(*controlplanev1.KubeadmControlPlane)
-
-	// 			return oldKcp.Status.Replicas != newKcp.Status.Replicas
-	// 		},
-	// 		CreateFunc: func(e event.CreateEvent) bool {
-	// 			return true
-	// 		},
-	// 		DeleteFunc: func(e event.DeleteEvent) bool {
-	// 			return false
-	// 		},
-	// 		GenericFunc: func(e event.GenericEvent) bool {
-	// 			return false
-	// 		},
-	// 	},
-	// )
-
-	// controller.Watch(
-	// 	&source.Kind{Type: &capiV1alpha3.MachineDeployment{}},
-	// 	handler.EnqueueRequestsFromMapFunc(r.requeueClusterManagersForMachineDeployment),
-	// 	predicate.Funcs{
-	// 		UpdateFunc: func(e event.UpdateEvent) bool {
-	// 			oldMd := e.ObjectOld.(*capiV1alpha3.MachineDeployment)
-	// 			newMd := e.ObjectNew.(*capiV1alpha3.MachineDeployment)
-
-	// 			return oldMd.Status.Replicas != newMd.Status.Replicas
-	// 		},
-	// 		CreateFunc: func(e event.CreateEvent) bool {
-	// 			return true
-	// 		},
-	// 		DeleteFunc: func(e event.DeleteEvent) bool {
-	// 			return false
-	// 		},
-	// 		GenericFunc: func(e event.GenericEvent) bool {
-	// 			return false
-	// 		},
-	// 	},
-	// )
 
 	subResources := []client.Object{
 		&certmanagerV1.Certificate{},
