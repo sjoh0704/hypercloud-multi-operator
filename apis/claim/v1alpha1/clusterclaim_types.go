@@ -37,6 +37,10 @@ const (
 	ClusterClaimPhaseError = ClusterClaimPhase("Error")
 )
 
+const (
+	ClusterClaimDeprecatedPhaseClusterDeleted = ClusterClaimPhase("ClusterDeleted")
+)
+
 // ClusterClaimSpec defines the desired state of ClusterClaim
 type ClusterClaimSpec struct {
 	// +kubebuilder:validation:Required
@@ -138,7 +142,7 @@ type ClusterClaimStatus struct {
 	Message string `json:"message,omitempty" protobuf:"bytes,2,opt,name=message"`
 	Reason  string `json:"reason,omitempty" protobuf:"bytes,3,opt,name=reason"`
 
-	// +kubebuilder:validation:Enum=Awaiting;Admitted;Approved;Rejected;Error;ClusterDeleted;
+	// +kubebuilder:validation:Enum=Awaiting;Admitted;Approved;Rejected;Error;ClusterDeleted;Cluster Deleted;
 	Phase ClusterClaimPhase `json:"phase,omitempty" protobuf:"bytes,4,opt,name=phase"`
 }
 

@@ -162,12 +162,30 @@ spec:
             description: ClusterManagerStatus defines the observed state of ClusterManager
             properties:
               applicationLink:
+<<<<<<< HEAD
                 type: boolean
+=======
+                type: string
+>>>>>>> 9bb11fefbe5b90b13a14898f44fb968529f3ee1e
               argoReady:
                 type: boolean
               authClientReady:
                 type: boolean
+<<<<<<< HEAD
               conditions:
+=======
+              controlPlaneEndpoint:
+                type: string
+              controlPlaneReady:
+                type: boolean
+              gatewayReady:
+                type: boolean
+              gatewayReadyMigration:
+                type: boolean
+              masterRun:
+                type: integer
+              nodeInfo:
+>>>>>>> 9bb11fefbe5b90b13a14898f44fb968529f3ee1e
                 items:
                   description: "Condition contains details for one aspect of the current
                     state of this API Resource. --- This struct is intended for direct
