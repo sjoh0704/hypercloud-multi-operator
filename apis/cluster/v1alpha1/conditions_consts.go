@@ -23,6 +23,7 @@ const (
 	InfrastructureProvisionedReadyCondition ConditionType = "InfrastructureProvisionedReady"
 	KubeconfigCreatedReadyCondition         ConditionType = "KubeconfigCreatedReady"
 	VolumeReadyCondition                    ConditionType = "VolumeReady"
+	ControlplaneReadyCondition              ConditionType = "ControlplaneReady"
 )
 
 const (
@@ -48,3 +49,9 @@ const (
 	VolumeSettingReconciliationFailedReason    = "VolumeSettingReconciliationFailed"
 	VolumeSettingReconciliationSucceededReason = "VolumeSettingReconciliationSucceeded"
 )
+
+const (
+	ControlplaneReady                          = "ControlplaneReady"
+	ControlplaneNotReady                       = "ControlplaneNotReady"
+)
+

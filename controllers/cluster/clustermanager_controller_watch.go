@@ -27,8 +27,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	capiV1alpha3 "sigs.k8s.io/cluster-api/api/v1alpha3"
-	controlplanev1 "sigs.k8s.io/cluster-api/controlplane/kubeadm/api/v1alpha3"
 	"sigs.k8s.io/cluster-api/util/patch"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -150,6 +148,13 @@ func (r *ClusterManagerReconciler) requeueClusterManagersForJob(o client.Object)
 				Status: metaV1.ConditionTrue,
 			})
 			log.Info("Created kubeconfig")
+			
+			meta.SetStatusCondition(&clm.Status.Conditions, metaV1.Condition{
+				Type:   string(clusterV1alpha1.ControlplaneReadyCondition),
+				Reason: clusterV1alpha1.ControlplaneReady,
+				Status: metaV1.ConditionTrue,
+			})
+			
 		} else {
 			return nil
 		}
@@ -163,78 +168,78 @@ func (r *ClusterManagerReconciler) requeueClusterManagersForJob(o client.Object)
 	return nil
 }
 
-func (r *ClusterManagerReconciler) requeueClusterManagersForKubeadmControlPlane(o client.Object) []ctrl.Request {
-	cp := o.DeepCopyObject().(*controlplanev1.KubeadmControlPlane)
-	log := r.Log.WithValues("objectMapper", "kubeadmControlPlaneToClusterManagers", "namespace", cp.Namespace, cp.Kind, cp.Name)
+// func (r *ClusterManagerReconciler) requeueClusterManagersForKubeadmControlPlane(o client.Object) []ctrl.Request {
+// 	cp := o.DeepCopyObject().(*controlplanev1.KubeadmControlPlane)
+// 	log := r.Log.WithValues("objectMapper", "kubeadmControlPlaneToClusterManagers", "namespace", cp.Namespace, cp.Kind, cp.Name)
 
-	// Don't handle deleted kubeadmcontrolplane
-	if !cp.ObjectMeta.DeletionTimestamp.IsZero() {
-		log.V(4).Info("kubeadmcontrolplane has a deletion timestamp, skipping mapping.")
-		return nil
-	}
+// 	// Don't handle deleted kubeadmcontrolplane
+// 	if !cp.ObjectMeta.DeletionTimestamp.IsZero() {
+// 		log.V(4).Info("kubeadmcontrolplane has a deletion timestamp, skipping mapping.")
+// 		return nil
+// 	}
 
-	key := types.NamespacedName{
-		Name:      strings.Split(cp.Name, "-control-plane")[0],
-		Namespace: cp.Namespace,
-	}
-	clm := &clusterV1alpha1.ClusterManager{}
-	if err := r.Get(context.TODO(), key, clm); errors.IsNotFound(err) {
-		log.Info("ClusterManager resource not found. Ignoring since object must be deleted")
-		return nil
-	} else if err != nil {
-		log.Error(err, "Failed to get ClusterManager")
-		return nil
-	}
+// 	key := types.NamespacedName{
+// 		Name:      strings.Split(cp.Name, "-control-plane")[0],
+// 		Namespace: cp.Namespace,
+// 	}
+// 	clm := &clusterV1alpha1.ClusterManager{}
+// 	if err := r.Get(context.TODO(), key, clm); errors.IsNotFound(err) {
+// 		log.Info("ClusterManager resource not found. Ignoring since object must be deleted")
+// 		return nil
+// 	} else if err != nil {
+// 		log.Error(err, "Failed to get ClusterManager")
+// 		return nil
+// 	}
 
-	//create helper for patch
-	helper, _ := patch.NewHelper(clm, r.Client)
-	defer func() {
-		if err := helper.Patch(context.TODO(), clm); err != nil {
-			log.Error(err, "ClusterManager patch error")
-		}
-	}()
+// 	//create helper for patch
+// 	helper, _ := patch.NewHelper(clm, r.Client)
+// 	defer func() {
+// 		if err := helper.Patch(context.TODO(), clm); err != nil {
+// 			log.Error(err, "ClusterManager patch error")
+// 		}
+// 	}()
 
-	clm.Status.MasterRun = int(cp.Status.Replicas)
+// 	clm.Status.MasterRun = int(cp.Status.Replicas)
 
-	return nil
-}
+// 	return nil
+// }
 
-func (r *ClusterManagerReconciler) requeueClusterManagersForMachineDeployment(o client.Object) []ctrl.Request {
-	md := o.DeepCopyObject().(*capiV1alpha3.MachineDeployment)
-	log := r.Log.WithValues("objectMapper", "MachineDeploymentToClusterManagers", "namespace", md.Namespace, md.Kind, md.Name)
+// func (r *ClusterManagerReconciler) requeueClusterManagersForMachineDeployment(o client.Object) []ctrl.Request {
+// 	md := o.DeepCopyObject().(*capiV1alpha3.MachineDeployment)
+// 	log := r.Log.WithValues("objectMapper", "MachineDeploymentToClusterManagers", "namespace", md.Namespace, md.Kind, md.Name)
 
-	// Don't handle deleted machinedeployment
-	if !md.ObjectMeta.DeletionTimestamp.IsZero() {
-		log.V(4).Info("machinedeployment has a deletion timestamp, skipping mapping.")
-		return nil
-	}
+// 	// Don't handle deleted machinedeployment
+// 	if !md.ObjectMeta.DeletionTimestamp.IsZero() {
+// 		log.V(4).Info("machinedeployment has a deletion timestamp, skipping mapping.")
+// 		return nil
+// 	}
 
-	//get ClusterManager
-	key := types.NamespacedName{
-		Name:      strings.Split(md.Name, "-md-0")[0],
-		Namespace: md.Namespace,
-	}
-	clm := &clusterV1alpha1.ClusterManager{}
-	if err := r.Get(context.TODO(), key, clm); errors.IsNotFound(err) {
-		log.Info("ClusterManager is deleted")
-		return nil
-	} else if err != nil {
-		log.Error(err, "Failed to get ClusterManager")
-		return nil
-	}
+// 	//get ClusterManager
+// 	key := types.NamespacedName{
+// 		Name:      strings.Split(md.Name, "-md-0")[0],
+// 		Namespace: md.Namespace,
+// 	}
+// 	clm := &clusterV1alpha1.ClusterManager{}
+// 	if err := r.Get(context.TODO(), key, clm); errors.IsNotFound(err) {
+// 		log.Info("ClusterManager is deleted")
+// 		return nil
+// 	} else if err != nil {
+// 		log.Error(err, "Failed to get ClusterManager")
+// 		return nil
+// 	}
 
-	//create helper for patch
-	helper, _ := patch.NewHelper(clm, r.Client)
-	defer func() {
-		if err := helper.Patch(context.TODO(), clm); err != nil {
-			log.Error(err, "ClusterManager patch error")
-		}
-	}()
+// 	//create helper for patch
+// 	helper, _ := patch.NewHelper(clm, r.Client)
+// 	defer func() {
+// 		if err := helper.Patch(context.TODO(), clm); err != nil {
+// 			log.Error(err, "ClusterManager patch error")
+// 		}
+// 	}()
 
-	clm.Status.WorkerRun = int(md.Status.Replicas)
+// 	clm.Status.WorkerRun = int(md.Status.Replicas)
 
-	return nil
-}
+// 	return nil
+// }
 
 func (r *ClusterManagerReconciler) requeueClusterManagersForSubresources(o client.Object) []ctrl.Request {
 	log := r.Log.WithValues("objectMapper", "SubresourcesToClusterManagers", "namespace", o.GetNamespace(), "name", o.GetName())

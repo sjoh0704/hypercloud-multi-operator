@@ -34,7 +34,6 @@ import (
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
 
 	batchV1 "k8s.io/api/batch/v1"
-	capiV1alpha3 "sigs.k8s.io/cluster-api/api/v1alpha3"
 
 	"sigs.k8s.io/cluster-api/util/patch"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -100,14 +99,7 @@ type ClusterManagerReconciler struct {
 
 // +kubebuilder:rbac:groups=cluster.tmax.io,resources=clustermanagers,verbs=create;delete;get;list;patch;update;watch
 // +kubebuilder:rbac:groups=cluster.tmax.io,resources=clustermanagers/status,verbs=get;list;patch;update;watch
-// +kubebuilder:rbac:groups=cluster.x-k8s.io,resources=clusters,verbs=get;list;watch
-// +kubebuilder:rbac:groups=cluster.x-k8s.io,resources=machinedeployments,verbs=create;delete;get;list;patch;update;watch
-// +kubebuilder:rbac:groups=cluster.x-k8s.io,resources=machinedeployments/status,verbs=get;list;patch;update;watch
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles;clusterrolebindings;roles;rolebindings,verbs=create;delete;get;list;patch;update;watch
-// +kubebuilder:rbac:groups=controlplane.cluster.x-k8s.io,resources=kubeadmcontrolplanes,verbs=create;delete;get;list;patch;update;watch
-// +kubebuilder:rbac:groups=controlplane.cluster.x-k8s.io,resources=kubeadmcontrolplanes/status,verbs=get;list;patch;update;watch
-// +kubebuilder:rbac:groups=servicecatalog.k8s.io,resources=serviceinstances,verbs=create;delete;get;list;patch;update;watch
-// +kubebuilder:rbac:groups=servicecatalog.k8s.io,resources=serviceinstances/status,verbs=get;list;patch;update;watch
 // +kubebuilder:rbac:groups=cert-manager.io,resources=certificates,verbs=create;delete;get;list;patch;update;watch
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=create;delete;get;list;patch;update;watch
 // +kubebuilder:rbac:groups="",resources=services;endpoints,verbs=create;delete;get;list;patch;update;watch
@@ -415,22 +407,14 @@ func (r *ClusterManagerReconciler) reconcileDelete(ctx context.Context, clusterM
 		return ctrl.Result{}, nil
 	}
 
-	//delete handling
-	key = clusterManager.GetNamespacedName()
-	if err := r.Get(context.TODO(), key, &capiV1alpha3.Cluster{}); errors.IsNotFound(err) {
-		if err := util.Delete(clusterManager.Namespace, clusterManager.Name); err != nil {
-			log.Error(err, "Failed to delete cluster info from cluster_member table")
-			return ctrl.Result{}, err
-		}
-		controllerutil.RemoveFinalizer(clusterManager, clusterV1alpha1.ClusterManagerFinalizer)
-		return ctrl.Result{}, nil
-	} else if err != nil {
-		log.Error(err, "Failed to get cluster")
+	// hypercloud api server를 통해서 cluster member를 삭제하는 작업 
+	if err := util.Delete(clusterManager.Namespace, clusterManager.Name); err != nil {
+		log.Error(err, "Failed to delete cluster info from cluster_member table")
 		return ctrl.Result{}, err
 	}
-
-	log.Info("Cluster is deleting. Requeue after 1min")
-	return ctrl.Result{RequeueAfter: requeueAfter1Minute}, nil
+	
+	controllerutil.RemoveFinalizer(clusterManager, clusterV1alpha1.ClusterManagerFinalizer)
+	return ctrl.Result{}, nil
 }
 
 func (r *ClusterManagerReconciler) reconcilePhase(_ context.Context, clusterManager *clusterV1alpha1.ClusterManager) {
