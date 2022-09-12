@@ -29,3 +29,12 @@ func CheckConditionExistAndConditionFalse(conditions []metav1.Condition, conditi
 func CheckConditionExistAndConditionTrue(conditions []metav1.Condition, conditionType clusterV1alpha1.ConditionType) bool {
 	return meta.IsStatusConditionTrue(conditions, string(conditionType))
 }
+
+//condition이 있으면 condition status를 재등록하고, 없다면 condition 생성
+func SetStatusCondition(conditions *[]metav1.Condition, conditionType clusterV1alpha1.ConditionType, conditionReason clusterV1alpha1.ConditionReason, status metav1.ConditionStatus) {
+	meta.SetStatusCondition(conditions, metav1.Condition{
+		Type:   string(conditionType),
+		Reason: string(conditionReason),
+		Status: status,
+	})
+}

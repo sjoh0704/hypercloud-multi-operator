@@ -24,7 +24,6 @@ import (
 	batchV1 "k8s.io/api/batch/v1"
 	coreV1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/cluster-api/util/patch"
@@ -89,27 +88,29 @@ func (r *ClusterManagerReconciler) requeueClusterManagersForJob(o client.Object)
 		}
 
 		if job.Annotations[clusterV1alpha1.AnnotationKeyJobType] == clusterV1alpha1.ProvisioningInfrastrucutre {
-			meta.SetStatusCondition(&clm.Status.Conditions, metaV1.Condition{
-				Type:   string(clusterV1alpha1.InfrastructureProvisionedReadyCondition),
-				Reason: clusterV1alpha1.InfrastructureProvisioningReconciliationFailedReason,
-				Status: metaV1.ConditionFalse,
-			})
+
+			util.SetStatusCondition(&clm.Status.Conditions,
+				clusterV1alpha1.InfrastructureProvisionedReadyCondition,
+				clusterV1alpha1.InfrastructureProvisioningReconciliationFailedReason,
+				metaV1.ConditionFalse)
 			log.Error(fmt.Errorf(failedReason), "Failed to provision infrastructure")
 
 		} else if job.Annotations[clusterV1alpha1.AnnotationKeyJobType] == clusterV1alpha1.InstallingK8s {
-			meta.SetStatusCondition(&clm.Status.Conditions, metaV1.Condition{
-				Type:   string(clusterV1alpha1.K8sInstalledReadyCondition),
-				Reason: clusterV1alpha1.K8sInstallingReconciliationFailedReason,
-				Status: metaV1.ConditionFalse,
-			})
+
+			util.SetStatusCondition(&clm.Status.Conditions,
+				clusterV1alpha1.K8sInstalledReadyCondition,
+				clusterV1alpha1.K8sInstallingReconciliationFailedReason,
+				metaV1.ConditionFalse)
+
 			log.Error(fmt.Errorf(failedReason), "Failed to install k8s")
 
 		} else if job.Annotations[clusterV1alpha1.AnnotationKeyJobType] == clusterV1alpha1.CreatingKubeconfig {
-			meta.SetStatusCondition(&clm.Status.Conditions, metaV1.Condition{
-				Type:   string(clusterV1alpha1.KubeconfigCreatedReadyCondition),
-				Reason: clusterV1alpha1.KubeconfigCreatingReconciliationFailedReason,
-				Status: metaV1.ConditionFalse,
-			})
+
+			util.SetStatusCondition(&clm.Status.Conditions,
+				clusterV1alpha1.KubeconfigCreatedReadyCondition,
+				clusterV1alpha1.KubeconfigCreatingReconciliationFailedReason,
+				metaV1.ConditionFalse)
+
 			log.Error(fmt.Errorf(failedReason), "Failed to create kubeconfig")
 		} else {
 			return nil
@@ -126,35 +127,36 @@ func (r *ClusterManagerReconciler) requeueClusterManagersForJob(o client.Object)
 	} else if job.Status.Succeeded == 1 {
 
 		if job.Annotations[clusterV1alpha1.AnnotationKeyJobType] == clusterV1alpha1.ProvisioningInfrastrucutre {
-			meta.SetStatusCondition(&clm.Status.Conditions, metaV1.Condition{
-				Type:   string(clusterV1alpha1.InfrastructureProvisionedReadyCondition),
-				Reason: clusterV1alpha1.InfrastructureProvisioningReconciliationSucceededReason,
-				Status: metaV1.ConditionTrue,
-			})
+
+			util.SetStatusCondition(&clm.Status.Conditions,
+				clusterV1alpha1.InfrastructureProvisionedReadyCondition,
+				clusterV1alpha1.InfrastructureProvisioningReconciliationSucceededReason,
+				metaV1.ConditionTrue)
+
 			log.Info("Created infrastructure")
 
 		} else if job.Annotations[clusterV1alpha1.AnnotationKeyJobType] == clusterV1alpha1.InstallingK8s {
-			meta.SetStatusCondition(&clm.Status.Conditions, metaV1.Condition{
-				Type:   string(clusterV1alpha1.K8sInstalledReadyCondition),
-				Reason: clusterV1alpha1.K8sInstallingReconciliationSucceededReason,
-				Status: metaV1.ConditionTrue,
-			})
+
+			util.SetStatusCondition(&clm.Status.Conditions,
+				clusterV1alpha1.K8sInstalledReadyCondition,
+				clusterV1alpha1.K8sInstallingReconciliationSucceededReason,
+				metaV1.ConditionTrue)
+
 			log.Info("Installed k8s")
 
 		} else if job.Annotations[clusterV1alpha1.AnnotationKeyJobType] == clusterV1alpha1.CreatingKubeconfig {
-			meta.SetStatusCondition(&clm.Status.Conditions, metaV1.Condition{
-				Type:   string(clusterV1alpha1.KubeconfigCreatedReadyCondition),
-				Reason: clusterV1alpha1.KubeconfigCreatingReconciliationSucceededReason,
-				Status: metaV1.ConditionTrue,
-			})
+			util.SetStatusCondition(&clm.Status.Conditions,
+				clusterV1alpha1.KubeconfigCreatedReadyCondition,
+				clusterV1alpha1.KubeconfigCreatingReconciliationSucceededReason,
+				metaV1.ConditionTrue)
+
 			log.Info("Created kubeconfig")
-			
-			meta.SetStatusCondition(&clm.Status.Conditions, metaV1.Condition{
-				Type:   string(clusterV1alpha1.ControlplaneReadyCondition),
-				Reason: clusterV1alpha1.ControlplaneReady,
-				Status: metaV1.ConditionTrue,
-			})
-			
+
+			util.SetStatusCondition(&clm.Status.Conditions,
+				clusterV1alpha1.ControlplaneReadyCondition,
+				clusterV1alpha1.ControlplaneReadyReason,
+				metaV1.ConditionTrue)
+
 		} else {
 			return nil
 		}
@@ -264,9 +266,15 @@ func (r *ClusterManagerReconciler) requeueClusterManagersForSubresources(o clien
 
 	isGateway := strings.Contains(o.GetName(), "gateway")
 	if isGateway {
-		clm.Status.GatewayReady = false
+		util.SetStatusCondition(&clm.Status.Conditions,
+			clusterV1alpha1.TraefikReadyCondition,
+			clusterV1alpha1.TraefikNotReadyReason,
+			metaV1.ConditionFalse)
 	} else {
-		clm.Status.TraefikReady = false
+		util.SetStatusCondition(&clm.Status.Conditions,
+			clusterV1alpha1.TraefikReadyCondition,
+			clusterV1alpha1.TraefikNotReadyReason,
+			metaV1.ConditionFalse)
 	}
 
 	err := r.Status().Update(context.TODO(), clm)

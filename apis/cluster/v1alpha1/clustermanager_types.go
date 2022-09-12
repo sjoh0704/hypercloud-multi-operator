@@ -135,7 +135,6 @@ type ClusterManagerStatus struct {
 	ArgoReady             bool                `json:"argoReady,omitempty"`
 	TraefikReady          bool                `json:"traefikReady,omitempty"`
 	GatewayReady          bool                `json:"gatewayReady,omitempty"`
-	GatewayReadyMigration bool                `json:"gatewayReadyMigration,omitempty"`
 	AuthClientReady       bool                `json:"authClientReady,omitempty"`
 	OpenSearchReady       bool                `json:"openSearchReady,omitempty"`
 	ApplicationLink       string              `json:"applicationLink,omitempty"`

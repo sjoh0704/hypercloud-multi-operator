@@ -24,34 +24,59 @@ const (
 	KubeconfigCreatedReadyCondition         ConditionType = "KubeconfigCreatedReady"
 	VolumeReadyCondition                    ConditionType = "VolumeReady"
 	ControlplaneReadyCondition              ConditionType = "ControlplaneReady"
+	ArgoReadyCondition                      ConditionType = "ArgoReady"
+	TraefikReadyCondition                   ConditionType = "TraefikReady"
+	GatewayReadyCondition                   ConditionType = "GatewayReady"
+	AuthClientReadyCondition                ConditionType = "AuthClientReady"
+)
+
+type ConditionReason string
+
+const (
+	K8sInstallingStartedReason                 ConditionReason = "K8sInstallingStarted"
+	K8sInstallingReconciliationFailedReason    ConditionReason = "K8sInstallReconciliationFailed"
+	K8sInstallingReconciliationSucceededReason ConditionReason = "K8sInstallReconciliationSucceeded"
 )
 
 const (
-	K8sInstallingStartedReason                 = "K8sInstallingStarted"
-	K8sInstallingReconciliationFailedReason    = "K8sInstallReconciliationFailed"
-	K8sInstallingReconciliationSucceededReason = "K8sInstallReconciliationSucceeded"
+	InfrastructureProvisioningStartedReason                 ConditionReason = "InfrastructureProvisioningStarted"
+	InfrastructureProvisioningReconciliationFailedReason    ConditionReason = "InfrastructureProvisioningReconciliationFailed"
+	InfrastructureProvisioningReconciliationSucceededReason ConditionReason = "InfrastructureProvisioningReconciliationSucceeded"
 )
 
 const (
-	InfrastructureProvisioningStartedReason                 = "InfrastructureProvisioningStarted"
-	InfrastructureProvisioningReconciliationFailedReason    = "InfrastructureProvisioningReconciliationFailed"
-	InfrastructureProvisioningReconciliationSucceededReason = "InfrastructureProvisioningReconciliationSucceeded"
+	KubeconfigCreatingStartedReason                 ConditionReason = "KubeconfigCreatingStarted"
+	KubeconfigCreatingReconciliationFailedReason    ConditionReason = "KubeconfigCreatingReconciliationFailed"
+	KubeconfigCreatingReconciliationSucceededReason ConditionReason = "KubeconfigCreatingReconciliationSucceeded"
 )
 
 const (
-	KubeconfigCreatingStartedReason                 = "KubeconfigCreatingStarted"
-	KubeconfigCreatingReconciliationFailedReason    = "KubeconfigCreatingReconciliationFailed"
-	KubeconfigCreatingReconciliationSucceededReason = "KubeconfigCreatingReconciliationSucceeded"
+	VolumeSettingStartedReason                 ConditionReason = "VolumeSettingStarted"
+	VolumeSettingReconciliationFailedReason    ConditionReason = "VolumeSettingReconciliationFailed"
+	VolumeSettingReconciliationSucceededReason ConditionReason = "VolumeSettingReconciliationSucceeded"
 )
 
 const (
-	VolumeSettingStartedReason                 = "VolumeSettingStarted"
-	VolumeSettingReconciliationFailedReason    = "VolumeSettingReconciliationFailed"
-	VolumeSettingReconciliationSucceededReason = "VolumeSettingReconciliationSucceeded"
+	ControlplaneReadyReason    ConditionReason = "ControlplaneReady"
+	ControlplaneNotReadyReason ConditionReason = "ControlplaneNotReady"
 )
 
 const (
-	ControlplaneReady                          = "ControlplaneReady"
-	ControlplaneNotReady                       = "ControlplaneNotReady"
+	ArgoReadyReason    ConditionReason = "ArgoReady"
+	ArgoNotReadyReason ConditionReason = "ArgoNotReady"
 )
 
+const (
+	TraefikReadyReason    ConditionReason = "TraefikReady"
+	TraefikNotReadyReason ConditionReason = "TraefikNotReady"
+)
+
+const (
+	GatewayReadyReason    ConditionReason = "GatewayReady"
+	GatewayNotReadyReason ConditionReason = "GatewayNotReady"
+)
+
+const (
+	AuthClientReadyReason    ConditionReason = "AuthClientReady"
+	AuthClientNotReadyReason ConditionReason = "AuthClientNotReady"
+)

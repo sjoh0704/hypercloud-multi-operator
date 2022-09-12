@@ -192,7 +192,11 @@ func (r *SecretReconciler) reconcileDelete(ctx context.Context, secret *coreV1.S
 				}
 			}()
 
-			clm.Status.ArgoReady = false
+			util.SetStatusCondition(&clm.Status.Conditions,
+				clusterV1alpha1.ArgoReadyCondition,
+				clusterV1alpha1.ArgoNotReadyReason,
+				metav1.ConditionFalse)
+
 			controllerutil.RemoveFinalizer(secret, clusterV1alpha1.ClusterManagerFinalizer)
 		} else if secret.Labels[util.LabelKeyClmSecretType] == util.ClmSecretTypeKubeconfig {
 			key = types.NamespacedName{
@@ -224,7 +228,10 @@ func (r *SecretReconciler) reconcileDelete(ctx context.Context, secret *coreV1.S
 				}
 			}()
 
-			clm.Status.TraefikReady = false
+			util.SetStatusCondition(&clm.Status.Conditions,
+				clusterV1alpha1.TraefikReadyCondition,
+				clusterV1alpha1.TraefikNotReadyReason,
+				metav1.ConditionFalse)
 			controllerutil.RemoveFinalizer(secret, clusterV1alpha1.ClusterManagerFinalizer)
 		}
 

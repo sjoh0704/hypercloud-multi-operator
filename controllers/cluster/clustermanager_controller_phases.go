@@ -180,11 +180,10 @@ func (r *ClusterManagerReconciler) ChangeVolumeReclaimPolicy(ctx context.Context
 		return ctrl.Result{}, err
 	}
 
-	meta.SetStatusCondition(&clusterManager.Status.Conditions, metaV1.Condition{
-		Type:   string(clusterV1alpha1.VolumeReadyCondition),
-		Reason: clusterV1alpha1.VolumeSettingStartedReason,
-		Status: metaV1.ConditionFalse,
-	})
+	util.SetStatusCondition(&clusterManager.Status.Conditions,
+		clusterV1alpha1.VolumeReadyCondition,
+		clusterV1alpha1.VolumeSettingStartedReason,
+		metaV1.ConditionFalse)
 
 	if pvc.Spec.VolumeName == "" {
 		log.Info("Waiting for creating persistent volume")
@@ -213,19 +212,18 @@ func (r *ClusterManagerReconciler) ChangeVolumeReclaimPolicy(ctx context.Context
 
 	if err := r.Update(context.TODO(), pv); err != nil {
 		log.Error(err, "Failed to update persistent volume")
-		meta.SetStatusCondition(&clusterManager.Status.Conditions, metaV1.Condition{
-			Type:   string(clusterV1alpha1.VolumeReadyCondition),
-			Reason: clusterV1alpha1.VolumeSettingReconciliationFailedReason,
-			Status: metaV1.ConditionFalse,
-		})
+
+		util.SetStatusCondition(&clusterManager.Status.Conditions,
+			clusterV1alpha1.VolumeReadyCondition,
+			clusterV1alpha1.VolumeSettingReconciliationFailedReason,
+			metaV1.ConditionFalse)
 		return ctrl.Result{}, err
 	}
 
-	meta.SetStatusCondition(&clusterManager.Status.Conditions, metaV1.Condition{
-		Type:   string(clusterV1alpha1.VolumeReadyCondition),
-		Reason: clusterV1alpha1.VolumeSettingReconciliationSucceededReason,
-		Status: metaV1.ConditionTrue,
-	})
+	util.SetStatusCondition(&clusterManager.Status.Conditions,
+		clusterV1alpha1.VolumeReadyCondition,
+		clusterV1alpha1.VolumeSettingReconciliationSucceededReason,
+		metaV1.ConditionTrue)
 
 	return ctrl.Result{}, nil
 }
@@ -305,11 +303,11 @@ func (r *ClusterManagerReconciler) ProvisioningInfra(ctx context.Context, cluste
 			return ctrl.Result{}, nil
 		}
 
-		meta.SetStatusCondition(&clusterManager.Status.Conditions, metaV1.Condition{
-			Type:   string(clusterV1alpha1.InfrastructureProvisionedReadyCondition),
-			Reason: clusterV1alpha1.InfrastructureProvisioningStartedReason,
-			Status: metaV1.ConditionFalse,
-		})
+		util.SetStatusCondition(&clusterManager.Status.Conditions,
+			clusterV1alpha1.InfrastructureProvisionedReadyCondition,
+			clusterV1alpha1.InfrastructureProvisioningStartedReason,
+			metaV1.ConditionFalse)
+
 		r.Status().Update(context.TODO(), clusterManager)
 		return ctrl.Result{}, nil
 
@@ -351,11 +349,11 @@ func (r *ClusterManagerReconciler) InstallK8s(ctx context.Context, clusterManage
 			log.Error(err, "Failed to create install-k8s job")
 			return ctrl.Result{}, nil
 		}
-		meta.SetStatusCondition(&clusterManager.Status.Conditions, metaV1.Condition{
-			Type:   string(clusterV1alpha1.K8sInstalledReadyCondition),
-			Reason: clusterV1alpha1.K8sInstallingStartedReason,
-			Status: metaV1.ConditionFalse,
-		})
+		util.SetStatusCondition(&clusterManager.Status.Conditions,
+			clusterV1alpha1.K8sInstalledReadyCondition,
+			clusterV1alpha1.K8sInstallingStartedReason,
+			metaV1.ConditionFalse)
+
 		r.Status().Update(context.TODO(), clusterManager)
 		return ctrl.Result{}, nil
 
@@ -411,11 +409,12 @@ func (r *ClusterManagerReconciler) CreateKubeconfig(ctx context.Context, cluster
 			log.Error(err, "Failed to create create-kubeconfig job")
 			return ctrl.Result{}, nil
 		}
-		meta.SetStatusCondition(&clusterManager.Status.Conditions, metaV1.Condition{
-			Type:   string(clusterV1alpha1.KubeconfigCreatedReadyCondition),
-			Reason: clusterV1alpha1.KubeconfigCreatingStartedReason,
-			Status: metaV1.ConditionFalse,
-		})
+
+		util.SetStatusCondition(&clusterManager.Status.Conditions,
+			clusterV1alpha1.KubeconfigCreatedReadyCondition,
+			clusterV1alpha1.KubeconfigCreatingStartedReason,
+			metaV1.ConditionFalse)
+
 		r.Status().Update(context.TODO(), clusterManager)
 		return ctrl.Result{}, nil
 
@@ -525,7 +524,7 @@ func (r *ClusterManagerReconciler) CreateKubeconfig(ctx context.Context, cluster
 
 func (r *ClusterManagerReconciler) CreateArgocdResources(ctx context.Context, clusterManager *clusterV1alpha1.ClusterManager) (ctrl.Result, error) {
 	if util.CheckConditionExistAndConditionFalse(clusterManager.GetConditions(), clusterV1alpha1.ControlplaneReadyCondition) ||
-		clusterManager.Status.ArgoReady {
+		util.CheckConditionExistAndConditionTrue(clusterManager.GetConditions(), clusterV1alpha1.ArgoReadyCondition) {
 		return ctrl.Result{}, nil
 	}
 
@@ -642,13 +641,18 @@ func (r *ClusterManagerReconciler) CreateArgocdResources(ctx context.Context, cl
 	}
 
 	log.Info("Create argocd cluster secret successfully")
-	clusterManager.Status.ArgoReady = true
+
+	util.SetStatusCondition(&clusterManager.Status.Conditions,
+		clusterV1alpha1.ArgoReadyCondition,
+		clusterV1alpha1.ArgoReadyReason,
+		metaV1.ConditionTrue)
 
 	return ctrl.Result{}, nil
 }
 
 func (r *ClusterManagerReconciler) CreateGatewayResources(ctx context.Context, clusterManager *clusterV1alpha1.ClusterManager) (reconcile.Result, error) {
-	if !clusterManager.Status.ArgoReady || clusterManager.Status.GatewayReady {
+	if util.CheckConditionExistAndConditionFalse(clusterManager.GetConditions(), clusterV1alpha1.ArgoReadyCondition) ||
+		util.CheckConditionExistAndConditionTrue(clusterManager.GetConditions(), clusterV1alpha1.GatewayReadyCondition) {
 		return ctrl.Result{}, nil
 	}
 	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
@@ -715,31 +719,30 @@ func (r *ClusterManagerReconciler) CreateGatewayResources(ctx context.Context, c
 		return ctrl.Result{}, err
 	}
 
-	// For migration from b5.0.26.6 > b5.0.26.7
-	// 리소스 이름 및 status 이름 변경에 대응하기 위한 migration 코드
-	// traefikReady, err := r.DeleteDeprecatedTraefikResources(clusterManager)
-	// if err != nil {
-	// 	return ctrl.Result{}, err
-	// }
-	// clusterManager.Status.TraefikReady = traefikReady
-
 	if err := r.DeleteDeprecatedPrometheusResources(clusterManager); err != nil {
 		return ctrl.Result{}, err
 	}
 
 	log.Info("Create gateway resources successfully")
-	clusterManager.Status.GatewayReady = true
+
+	util.SetStatusCondition(&clusterManager.Status.Conditions,
+		clusterV1alpha1.GatewayReadyCondition,
+		clusterV1alpha1.GatewayReadyReason,
+		metaV1.ConditionTrue)
+
 	return ctrl.Result{}, nil
 }
 
 func (r *ClusterManagerReconciler) CreateHyperAuthResources(ctx context.Context, clusterManager *clusterV1alpha1.ClusterManager) (reconcile.Result, error) {
-	if !clusterManager.Status.GatewayReady || clusterManager.Status.AuthClientReady {
+	if util.CheckConditionExistAndConditionFalse(clusterManager.GetConditions(), clusterV1alpha1.GatewayReadyCondition) ||
+		util.CheckConditionExistAndConditionTrue(clusterManager.GetConditions(), clusterV1alpha1.AuthClientReadyCondition) {
 		return ctrl.Result{}, nil
 	}
+
 	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
 	log.Info("Start to reconcile phase for CreateHyperauthClient")
 
-	// Hyperauth의 password를 가져오기 위한 secret을 조회
+	// Hyperauth의 password를 가져오기 위한 secret을 조회util.CheckConditionExistAndConditionFalse(clusterManager.GetConditions(), clusterV1alpha1.GatewayReadyCondition)
 	key := types.NamespacedName{
 		Name:      "passwords",
 		Namespace: "hyperauth",
@@ -816,7 +819,12 @@ func (r *ClusterManagerReconciler) CreateHyperAuthResources(ctx context.Context,
 	}
 
 	log.Info("Create clients for single cluster successfully")
-	clusterManager.Status.AuthClientReady = true
+
+	util.SetStatusCondition(&clusterManager.Status.Conditions,
+		clusterV1alpha1.AuthClientReadyCondition,
+		clusterV1alpha1.AuthClientReadyReason,
+		metaV1.ConditionTrue)
+
 	return ctrl.Result{}, nil
 }
 
@@ -893,9 +901,15 @@ func (r *ClusterManagerReconciler) CreateHyperAuthResources(ctx context.Context,
 // }
 
 func (r *ClusterManagerReconciler) CreateTraefikResources(ctx context.Context, clusterManager *clusterV1alpha1.ClusterManager) (ctrl.Result, error) {
-	if !clusterManager.Status.AuthClientReady || clusterManager.Status.TraefikReady {
+	// sjoh 임시
+	// if !clusterManager.Status.AuthClientReady || clusterManager.Status.TraefikReady {
+	// 	return ctrl.Result{}, nil
+	// }
+	if util.CheckConditionExistAndConditionFalse(clusterManager.GetConditions(), clusterV1alpha1.GatewayReadyCondition) ||
+		util.CheckConditionExistAndConditionTrue(clusterManager.GetConditions(), clusterV1alpha1.TraefikReadyCondition) {
 		return ctrl.Result{}, nil
 	}
+
 	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
 	log.Info("Start to reconcile phase for CreateTraefikResources")
 
@@ -916,6 +930,11 @@ func (r *ClusterManagerReconciler) CreateTraefikResources(ctx context.Context, c
 	}
 
 	log.Info("Create traefik resources successfully")
-	clusterManager.Status.TraefikReady = true
+
+	util.SetStatusCondition(&clusterManager.Status.Conditions,
+		clusterV1alpha1.TraefikReadyCondition,
+		clusterV1alpha1.TraefikReadyReason,
+		metaV1.ConditionTrue)
+
 	return ctrl.Result{}, nil
 }

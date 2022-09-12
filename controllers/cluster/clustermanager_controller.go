@@ -17,7 +17,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -145,33 +144,6 @@ func (r *ClusterManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	if !controllerutil.ContainsFinalizer(clusterManager, clusterV1alpha1.ClusterManagerFinalizer) {
 		controllerutil.AddFinalizer(clusterManager, clusterV1alpha1.ClusterManagerFinalizer)
 		return ctrl.Result{}, nil
-	}
-
-	// Label migration for old version
-	if _, ok := clusterManager.GetLabels()[clusterV1alpha1.LabelKeyClmClusterTypeDefunct]; ok {
-		clusterManager.Labels[clusterV1alpha1.LabelKeyClmClusterType] =
-			clusterManager.Labels[clusterV1alpha1.LabelKeyClmClusterTypeDefunct]
-	}
-
-	// Status migration for old version
-	if !clusterManager.Status.GatewayReadyMigration {
-		clusterManager.Status.GatewayReady = clusterManager.Status.PrometheusReady
-		clusterManager.Status.GatewayReadyMigration = true
-	}
-
-	// ApplicationLink migration for old version
-	if clusterManager.Status.ApplicationLink == "" {
-		argoIngress := &networkingv1.Ingress{}
-		key := types.NamespacedName{
-			Name:      util.ArgoIngressName,
-			Namespace: util.ArgoNamespace,
-		}
-		if err := r.Get(context.TODO(), key, argoIngress); err != nil {
-			log.Error(err, "Can not get argocd ingress information.")
-		} else {
-			subdomain := strings.Split(argoIngress.Spec.Rules[0].Host, ".")[0]
-			clusterManager.SetApplicationLink(subdomain)
-		}
 	}
 
 	if clusterManager.Labels[clusterV1alpha1.LabelKeyClmClusterType] == clusterV1alpha1.ClusterTypeRegistered {
@@ -305,7 +277,7 @@ func (r *ClusterManagerReconciler) reconcile(ctx context.Context, clusterManager
 		// Kibana, Grafana, Kiali 등 모듈과 HyperAuth oidc 연동을 위한 resource 생성 작업 (HyperAuth 계정정보로 여러 모듈에 로그인 가능)
 		// HyperAuth caller 를 통해 admin token 을 가져와 각 모듈 마다 HyperAuth client 를 생성후, 모듈에 따른 resource들을 추가한다.
 		// HyperRegistry를 위한 admin group 또한 생성해준다.
-		
+
 		// sjoh-임시
 		// r.CreateHyperAuthResources,
 		// // hyperregistry domain 을 single cluster 의 ingress 로 부터 가져와 oidc 연동설정
@@ -409,12 +381,12 @@ func (r *ClusterManagerReconciler) reconcileDelete(ctx context.Context, clusterM
 		return ctrl.Result{}, nil
 	}
 
-	// hypercloud api server를 통해서 cluster member를 삭제하는 작업 
+	// hypercloud api server를 통해서 cluster member를 삭제하는 작업
 	// if err := util.Delete(clusterManager.Namespace, clusterManager.Name); err != nil {
 	// 	log.Error(err, "Failed to delete cluster info from cluster_member table")
 	// 	return ctrl.Result{}, err
 	// }
-	
+
 	controllerutil.RemoveFinalizer(clusterManager, clusterV1alpha1.ClusterManagerFinalizer)
 	return ctrl.Result{}, nil
 }
@@ -436,39 +408,20 @@ func (r *ClusterManagerReconciler) reconcilePhase(_ context.Context, clusterMana
 		return
 	}
 
-	if clusterManager.Status.ArgoReady {
+	if util.CheckConditionExistAndConditionTrue(clusterManager.GetConditions(), clusterV1alpha1.ArgoReadyCondition) {
 		clusterManager.Status.SetTypedPhase(clusterV1alpha1.ClusterManagerPhaseSyncNeeded)
 	}
 
-	if clusterManager.Status.GatewayReady {
+	if util.CheckConditionExistAndConditionTrue(clusterManager.GetConditions(), clusterV1alpha1.GatewayReadyCondition) {
 		clusterManager.Status.SetTypedPhase(clusterV1alpha1.ClusterManagerPhaseProcessing)
 	}
 
-	if clusterManager.Status.TraefikReady {
+	if util.CheckConditionExistAndConditionTrue(clusterManager.GetConditions(), clusterV1alpha1.TraefikReadyCondition) {
 		clusterManager.Status.SetTypedPhase(clusterV1alpha1.ClusterManagerPhaseReady)
 	}
 
 	if !clusterManager.DeletionTimestamp.IsZero() {
 		clusterManager.Status.SetTypedPhase(clusterV1alpha1.ClusterManagerPhaseDeleting)
-	}
-
-	// for migration
-	if clusterManager.Status.Phase == clusterV1alpha1.ClusterManagerDeprecatedPhaseProvisioning ||
-		clusterManager.Status.Phase == clusterV1alpha1.ClusterManagerDeprecatedPhaseRegistering {
-		if clusterManager.Status.GatewayReady {
-			clusterManager.Status.SetTypedPhase(clusterV1alpha1.ClusterManagerPhaseProcessing)
-		} else {
-			clusterManager.Status.SetTypedPhase(clusterV1alpha1.ClusterManagerPhaseSyncNeeded)
-		}
-	}
-
-	if clusterManager.Status.Phase == clusterV1alpha1.ClusterManagerDeprecatedPhaseProvisioned ||
-		clusterManager.Status.Phase == clusterV1alpha1.ClusterManagerDeprecatedPhaseRegistered {
-		if clusterManager.Status.GatewayReady {
-			clusterManager.Status.SetTypedPhase(clusterV1alpha1.ClusterManagerPhaseReady)
-		} else {
-			clusterManager.Status.SetTypedPhase(clusterV1alpha1.ClusterManagerPhaseSyncNeeded)
-		}
 	}
 }
 
@@ -492,7 +445,10 @@ func (r *ClusterManagerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 						!newclm.DeletionTimestamp.IsZero()
 					isControlPlaneEndpointUpdate := oldclm.Status.ControlPlaneEndpoint == "" &&
 						newclm.Status.ControlPlaneEndpoint != ""
-					isSubResourceNotReady := !newclm.Status.ArgoReady || !newclm.Status.TraefikReady || !newclm.Status.GatewayReady
+					isSubResourceNotReady := util.CheckConditionExistAndConditionFalse(newclm.GetConditions(), clusterV1alpha1.ArgoReadyCondition) ||
+						util.CheckConditionExistAndConditionFalse(newclm.GetConditions(), clusterV1alpha1.TraefikReadyCondition) ||
+						util.CheckConditionExistAndConditionFalse(newclm.GetConditions(), clusterV1alpha1.GatewayReadyCondition)
+
 					if isDelete || isControlPlaneEndpointUpdate || isFinalized {
 						return true
 					} else {
