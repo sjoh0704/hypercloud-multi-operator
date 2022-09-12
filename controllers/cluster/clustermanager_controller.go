@@ -305,7 +305,9 @@ func (r *ClusterManagerReconciler) reconcile(ctx context.Context, clusterManager
 		// Kibana, Grafana, Kiali 등 모듈과 HyperAuth oidc 연동을 위한 resource 생성 작업 (HyperAuth 계정정보로 여러 모듈에 로그인 가능)
 		// HyperAuth caller 를 통해 admin token 을 가져와 각 모듈 마다 HyperAuth client 를 생성후, 모듈에 따른 resource들을 추가한다.
 		// HyperRegistry를 위한 admin group 또한 생성해준다.
-		r.CreateHyperAuthResources,
+		
+		// sjoh-임시
+		// r.CreateHyperAuthResources,
 		// // hyperregistry domain 을 single cluster 의 ingress 로 부터 가져와 oidc 연동설정
 		// r.SetHyperregistryOidcConfig,
 		// Traefik 을 통하기 위한 리소스인 certificate, ingress, middleware를 생성한다.
@@ -347,30 +349,30 @@ func (r *ClusterManagerReconciler) reconcileDelete(ctx context.Context, clusterM
 		Name:      clusterManager.Name + util.KubeconfigSuffix,
 		Namespace: clusterManager.Namespace,
 	}
-	kubeconfigSecret := &coreV1.Secret{}
-	if err := r.Get(context.TODO(), key, kubeconfigSecret); err != nil && !errors.IsNotFound(err) {
-		log.Error(err, "Failed to get kubeconfig secret")
-		return ctrl.Result{}, err
-	}
+	// kubeconfigSecret := &coreV1.Secret{}
+	// if err := r.Get(context.TODO(), key, kubeconfigSecret); err != nil && !errors.IsNotFound(err) {
+	// 	log.Error(err, "Failed to get kubeconfig secret")
+	// 	return ctrl.Result{}, err
+	// }
 
 	// ArgoCD application이 모두 삭제되었는지 테스트
-	if err := r.CheckApplicationRemains(clusterManager); err != nil {
-		return ctrl.Result{}, err
-	}
+	// if err := r.CheckApplicationRemains(clusterManager); err != nil {
+	// 	return ctrl.Result{}, err
+	// }
 
 	// ClusterAPI-provider-aws의 경우, lb type의 svc가 남아있으면 infra nlb deletion이 stuck걸리면서 클러스터가 지워지지 않는 버그가 있음
 	// 이를 해결하기 위해 클러스터를 삭제하기 전에 lb type의 svc를 전체 삭제한 후 클러스터를 삭제
-	if err := r.DeleteLoadBalancerServices(clusterManager); err != nil {
-		return ctrl.Result{}, err
-	}
+	// if err := r.DeleteLoadBalancerServices(clusterManager); err != nil {
+	// 	return ctrl.Result{}, err
+	// }
 
-	if err := r.DeleteTraefikResources(clusterManager); err != nil {
-		return ctrl.Result{}, err
-	}
+	// if err := r.DeleteTraefikResources(clusterManager); err != nil {
+	// 	return ctrl.Result{}, err
+	// }
 
-	if err := r.DeleteHyperAuthResourcesForSingleCluster(clusterManager); err != nil {
-		return ctrl.Result{}, err
-	}
+	// if err := r.DeleteHyperAuthResourcesForSingleCluster(clusterManager); err != nil {
+	// 	return ctrl.Result{}, err
+	// }
 
 	key = types.NamespacedName{
 		Name:      fmt.Sprintf("%s-destroy-infra", clusterManager.Name),
@@ -408,10 +410,10 @@ func (r *ClusterManagerReconciler) reconcileDelete(ctx context.Context, clusterM
 	}
 
 	// hypercloud api server를 통해서 cluster member를 삭제하는 작업 
-	if err := util.Delete(clusterManager.Namespace, clusterManager.Name); err != nil {
-		log.Error(err, "Failed to delete cluster info from cluster_member table")
-		return ctrl.Result{}, err
-	}
+	// if err := util.Delete(clusterManager.Namespace, clusterManager.Name); err != nil {
+	// 	log.Error(err, "Failed to delete cluster info from cluster_member table")
+	// 	return ctrl.Result{}, err
+	// }
 	
 	controllerutil.RemoveFinalizer(clusterManager, clusterV1alpha1.ClusterManagerFinalizer)
 	return ctrl.Result{}, nil

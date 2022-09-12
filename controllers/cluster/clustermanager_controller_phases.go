@@ -47,7 +47,7 @@ import (
 
 func (r *ClusterManagerReconciler) UpdateClusterManagerStatus(ctx context.Context, clusterManager *clusterV1alpha1.ClusterManager) (ctrl.Result, error) {
 
-	if util.CheckConditionExistAndConditionTrue(clusterManager.GetConditions(), string(clusterV1alpha1.ControlplaneReadyCondition)) {
+	if util.CheckConditionExistAndConditionTrue(clusterManager.GetConditions(), clusterV1alpha1.ControlplaneReadyCondition) {
 		return ctrl.Result{}, nil
 	}
 	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
@@ -278,7 +278,7 @@ func (r *ClusterManagerReconciler) CreatePersistentVolumeClaim(ctx context.Conte
 
 func (r *ClusterManagerReconciler) ProvisioningInfra(ctx context.Context, clusterManager *clusterV1alpha1.ClusterManager) (ctrl.Result, error) {
 
-	if util.CheckConditionExistAndConditionTrue(clusterManager.GetConditions(), string(clusterV1alpha1.InfrastructureProvisionedReadyCondition)) ||
+	if util.CheckConditionExistAndConditionTrue(clusterManager.GetConditions(), clusterV1alpha1.InfrastructureProvisionedReadyCondition) ||
 		clusterManager.Status.FailureReason != nil {
 		return ctrl.Result{}, nil
 	}
@@ -323,8 +323,8 @@ func (r *ClusterManagerReconciler) ProvisioningInfra(ctx context.Context, cluste
 
 func (r *ClusterManagerReconciler) InstallK8s(ctx context.Context, clusterManager *clusterV1alpha1.ClusterManager) (ctrl.Result, error) {
 
-	if util.CheckConditionExistAndConditionTrue(clusterManager.GetConditions(), string(clusterV1alpha1.K8sInstalledReadyCondition)) ||
-		util.CheckConditionExistAndConditionFalse(clusterManager.GetConditions(), string(clusterV1alpha1.InfrastructureProvisionedReadyCondition)) ||
+	if util.CheckConditionExistAndConditionTrue(clusterManager.GetConditions(), clusterV1alpha1.K8sInstalledReadyCondition) ||
+		util.CheckConditionExistAndConditionFalse(clusterManager.GetConditions(), clusterV1alpha1.InfrastructureProvisionedReadyCondition) ||
 		clusterManager.Status.FailureReason != nil {
 
 		return ctrl.Result{}, nil
@@ -368,9 +368,9 @@ func (r *ClusterManagerReconciler) InstallK8s(ctx context.Context, clusterManage
 
 func (r *ClusterManagerReconciler) CreateKubeconfig(ctx context.Context, clusterManager *clusterV1alpha1.ClusterManager) (ctrl.Result, error) {
 
-	if util.CheckConditionExistAndConditionTrue(clusterManager.GetConditions(), string(clusterV1alpha1.KubeconfigCreatedReadyCondition)) ||
-		util.CheckConditionExistAndConditionFalse(clusterManager.GetConditions(), string(clusterV1alpha1.K8sInstalledReadyCondition)) ||
-		util.CheckConditionExistAndConditionFalse(clusterManager.GetConditions(), string(clusterV1alpha1.InfrastructureProvisionedReadyCondition)) ||
+	if util.CheckConditionExistAndConditionTrue(clusterManager.GetConditions(), clusterV1alpha1.KubeconfigCreatedReadyCondition) ||
+		util.CheckConditionExistAndConditionFalse(clusterManager.GetConditions(), clusterV1alpha1.K8sInstalledReadyCondition) ||
+		util.CheckConditionExistAndConditionFalse(clusterManager.GetConditions(), clusterV1alpha1.InfrastructureProvisionedReadyCondition) ||
 		clusterManager.Status.FailureReason != nil {
 		return ctrl.Result{}, nil
 	}
@@ -379,6 +379,21 @@ func (r *ClusterManagerReconciler) CreateKubeconfig(ctx context.Context, cluster
 	log.Info("Start to reconcile phase for CreateKubeconfig")
 
 	key := types.NamespacedName{
+		Name:      fmt.Sprintf("%s-kubeconfig", clusterManager.Name),
+		Namespace: clusterManager.Namespace,
+	}
+
+	// kubeconfig-secret이 있는지 먼저 검사
+	if err := r.Get(context.TODO(), key, &coreV1.Secret{}); errors.IsNotFound(err) {
+		log.Info("kubeconfig secret doesn't exists. create-kubeconfig job will be created")
+	} else if err != nil {
+		log.Error(err, "Failed to get kubeconfig secret")
+	} else {
+		log.Info("kubeconfig secret already exists. create-kubeconfig job will be not created")
+		return ctrl.Result{}, nil
+	}
+
+	key = types.NamespacedName{
 		Name:      fmt.Sprintf("%s-create-kubeconfig", clusterManager.Name),
 		Namespace: clusterManager.Namespace,
 	}
@@ -509,8 +524,7 @@ func (r *ClusterManagerReconciler) CreateKubeconfig(ctx context.Context, cluster
 // }
 
 func (r *ClusterManagerReconciler) CreateArgocdResources(ctx context.Context, clusterManager *clusterV1alpha1.ClusterManager) (ctrl.Result, error) {
-	if util.CheckConditionExistAndConditionFalse(clusterManager.GetConditions(), string(clusterV1alpha1.ControlplaneReadyCondition)) ||
-		!clusterManager.Status.Ready ||
+	if util.CheckConditionExistAndConditionFalse(clusterManager.GetConditions(), clusterV1alpha1.ControlplaneReadyCondition) ||
 		clusterManager.Status.ArgoReady {
 		return ctrl.Result{}, nil
 	}

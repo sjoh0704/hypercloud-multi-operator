@@ -100,6 +100,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "ClusterManager")
 		os.Exit(1)
 	}
+	// sjoh-임시
 	// if err = (&claimV1alpha1.ClusterClaim{}).SetupWebhookWithManager(mgr); err != nil {
 	// 	setupLog.Error(err, "unable to create webhook", "webhook", "ClusterClaim")
 	// 	os.Exit(1)
@@ -141,6 +142,8 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "ClusterRegistration")
 		os.Exit(1)
 	}
+
+	// sjoh-임시
 	// if err = (&clusterV1alpha1.ClusterRegistration{}).SetupWebhookWithManager(mgr); err != nil {
 	// 	setupLog.Error(err, "unable to create webhook", "webhook", "ClusterRegistration")
 	// 	os.Exit(1)

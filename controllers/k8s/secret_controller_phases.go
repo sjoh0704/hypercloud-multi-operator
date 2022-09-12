@@ -289,6 +289,9 @@ func (r *SecretReconciler) DeployArgocdResources(ctx context.Context, secret *co
 	}
 
 	if _, ok := secret.Annotations[util.AnnotationKeyArgoClusterSecret]; !ok {
+		if secret.Annotations == nil {
+			secret.Annotations = map[string]string{}
+		}
 		secret.Annotations[util.AnnotationKeyArgoClusterSecret] = argoSecretName
 	}
 

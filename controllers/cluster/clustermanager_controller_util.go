@@ -275,9 +275,8 @@ func (r *ClusterManagerReconciler) CreateKubeconfigJob(clusterManager *clusterV1
 	var backoffLimit int32 = 0
 	var serviceAutoMount bool = true
 
-	DeleteExistSecretCommand := fmt.Sprintf("kubectl -n %s delete secret %s%s", clusterManager.Namespace, clusterManager.Name, util.KubeconfigSuffix)
 	CreateNewSecretCommand := fmt.Sprintf("kubectl -n %s create secret generic %s%s --from-file=value=/context/admin.conf 2> /dev/termination-log;", clusterManager.Namespace, clusterManager.Name, util.KubeconfigSuffix)
-
+	
 	createKubeconfigJob := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-create-kubeconfig", clusterManager.Name),
@@ -300,7 +299,7 @@ func (r *ClusterManagerReconciler) CreateKubeconfigJob(clusterManager *clusterV1
 							Name:    clusterV1alpha1.Kubespray,
 							Image:   clusterV1alpha1.KubectlImage,
 							Command: []string{"/bin/sh", "-c"},
-							Args:    []string{DeleteExistSecretCommand + "&&" + CreateNewSecretCommand},
+							Args:    []string{CreateNewSecretCommand},
 							VolumeMounts: []coreV1.VolumeMount{
 								{
 									Name:      "kubespray-context",

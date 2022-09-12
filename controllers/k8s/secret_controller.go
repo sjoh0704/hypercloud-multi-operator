@@ -75,10 +75,12 @@ func (r *SecretReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ c
 	if !isArgoSecret && !isSATokenSecret && !strings.Contains(secretName, util.KubeconfigSuffix) {
 		secretName += util.KubeconfigSuffix
 	}
+
 	key := types.NamespacedName{
 		Name:      secretName,
 		Namespace: req.Namespace,
 	}
+
 	log := r.Log.WithValues("Secret", key)
 	log.Info("Start to reconcile secret")
 
@@ -104,8 +106,12 @@ func (r *SecretReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ c
 		}
 	}()
 
+	// nil pointer error
 	// capi에 의해 생성된 kubeconfig secret에는 secret type에 대한 Label이 달려있지 않으므로, annotation을 생성해준다.
 	if _, ok := secret.Labels[util.LabelKeyClmSecretType]; !ok {
+		if secret.Labels == nil {
+			secret.Labels = map[string]string{}
+		}
 		secret.Labels[util.LabelKeyClmSecretType] = util.ClmSecretTypeKubeconfig
 	}
 
@@ -351,11 +357,12 @@ func (r *SecretReconciler) reconcileDelete(ctx context.Context, secret *coreV1.S
 		}
 	}
 
+	// sjoh-임시
 	// db 에서 member 삭제
-	if err := util.Delete(clm.Namespace, clm.Name); err != nil {
-		log.Error(err, "Failed to delete cluster info from cluster_member table")
-		return ctrl.Result{}, err
-	}
+	// if err := util.Delete(clm.Namespace, clm.Name); err != nil {
+	// 	log.Error(err, "Failed to delete cluster info from cluster_member table")
+	// 	return ctrl.Result{}, err
+	// }
 
 	crList := []string{
 		"developer",
@@ -468,11 +475,11 @@ func (r *SecretReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			UpdateFunc: func(e event.UpdateEvent) bool {
 				oldClm := e.ObjectOld.(*clusterV1alpha1.ClusterManager)
 				newClm := e.ObjectNew.(*clusterV1alpha1.ClusterManager)
-				if util.CheckConditionExistAndConditionFalse(oldClm.GetConditions(), string(clusterV1alpha1.ControlplaneReadyCondition)) &&
-					util.CheckConditionExistAndConditionTrue(newClm.GetConditions(), string(clusterV1alpha1.ControlplaneReadyCondition)) {
+				if (!util.CheckConditionExist(oldClm.GetConditions(), clusterV1alpha1.ControlplaneReadyCondition) ||
+					util.CheckConditionExistAndConditionFalse(oldClm.GetConditions(), clusterV1alpha1.ControlplaneReadyCondition)) &&
+					util.CheckConditionExistAndConditionTrue(newClm.GetConditions(), clusterV1alpha1.ControlplaneReadyCondition) {
 					return true
 				}
-
 				return false
 			},
 			CreateFunc: func(e event.CreateEvent) bool {
