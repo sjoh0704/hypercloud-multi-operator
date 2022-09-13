@@ -7,8 +7,6 @@ import (
 	"net/url"
 	"strings"
 	"time"
-
-	clusterV1alpha1 "github.com/tmax-cloud/hypercloud-multi-operator/apis/cluster/v1alpha1"
 	coreV1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/kubernetes"
@@ -17,20 +15,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-func GetTerminatedPodStateReason(pod *coreV1.Pod) (string, error) {
-	if pod == nil {
-		return "", fmt.Errorf("pod doesn't exist")
-	}
-	for _, containerStatus := range pod.Status.ContainerStatuses {
-		if containerStatus.Name == clusterV1alpha1.Kubespray {
-			if containerStatus.State.Terminated != nil {
-				return containerStatus.State.Terminated.Message, nil
-			}
-			return "", fmt.Errorf("not yet terminated")
-		}
-	}
-	return "", fmt.Errorf("not found kubespray container")
-}
 
 // LowestNonZeroResult compares two reconciliation results
 // and returns the one with lowest requeue time.
