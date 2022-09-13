@@ -276,7 +276,7 @@ func (r *ClusterManagerReconciler) CreateKubeconfigJob(clusterManager *clusterV1
 	var serviceAutoMount bool = true
 
 	CreateNewSecretCommand := fmt.Sprintf("kubectl -n %s create secret generic %s%s --from-file=value=/context/admin.conf 2> /dev/termination-log;", clusterManager.Namespace, clusterManager.Name, util.KubeconfigSuffix)
-	
+
 	createKubeconfigJob := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-create-kubeconfig", clusterManager.Name),
@@ -1324,9 +1324,10 @@ func (r *ClusterManagerReconciler) DeleteLoadBalancerServices(clusterManager *cl
 	}
 
 	for _, ns := range nsList.Items {
-		if ns.Name == util.KubeNamespace {
-			continue
-		}
+		//  sjoh 임시
+		// if ns.Name == util.KubeNamespace {
+		// 	continue
+		// }
 
 		svcList, err := remoteClientset.CoreV1().Services(ns.Name).List(context.TODO(), metav1.ListOptions{})
 		if err != nil {

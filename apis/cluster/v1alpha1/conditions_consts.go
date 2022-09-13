@@ -33,50 +33,43 @@ const (
 type ConditionReason string
 
 const (
+	//install k8s job
 	K8sInstallingStartedReason                 ConditionReason = "K8sInstallingStarted"
 	K8sInstallingReconciliationFailedReason    ConditionReason = "K8sInstallReconciliationFailed"
 	K8sInstallingReconciliationSucceededReason ConditionReason = "K8sInstallReconciliationSucceeded"
-)
 
-const (
+	//provision infra job
 	InfrastructureProvisioningStartedReason                 ConditionReason = "InfrastructureProvisioningStarted"
 	InfrastructureProvisioningReconciliationFailedReason    ConditionReason = "InfrastructureProvisioningReconciliationFailed"
 	InfrastructureProvisioningReconciliationSucceededReason ConditionReason = "InfrastructureProvisioningReconciliationSucceeded"
-)
 
-const (
+	//create kubeconfig secret
 	KubeconfigCreatingStartedReason                 ConditionReason = "KubeconfigCreatingStarted"
 	KubeconfigCreatingReconciliationFailedReason    ConditionReason = "KubeconfigCreatingReconciliationFailed"
 	KubeconfigCreatingReconciliationSucceededReason ConditionReason = "KubeconfigCreatingReconciliationSucceeded"
-)
 
-const (
+	// volume setting
 	VolumeSettingStartedReason                 ConditionReason = "VolumeSettingStarted"
 	VolumeSettingReconciliationFailedReason    ConditionReason = "VolumeSettingReconciliationFailed"
 	VolumeSettingReconciliationSucceededReason ConditionReason = "VolumeSettingReconciliationSucceeded"
-)
 
-const (
+	// controlplane ready
 	ControlplaneReadyReason    ConditionReason = "ControlplaneReady"
 	ControlplaneNotReadyReason ConditionReason = "ControlplaneNotReady"
-)
 
-const (
+	// argocd ready
 	ArgoReadyReason    ConditionReason = "ArgoReady"
 	ArgoNotReadyReason ConditionReason = "ArgoNotReady"
-)
 
-const (
+	// traefik ready
 	TraefikReadyReason    ConditionReason = "TraefikReady"
 	TraefikNotReadyReason ConditionReason = "TraefikNotReady"
-)
 
-const (
+	// external name service ready
 	GatewayReadyReason    ConditionReason = "GatewayReady"
 	GatewayNotReadyReason ConditionReason = "GatewayNotReady"
-)
 
-const (
+	// hyperauth client set ready
 	AuthClientReadyReason    ConditionReason = "AuthClientReady"
 	AuthClientNotReadyReason ConditionReason = "AuthClientNotReady"
 )

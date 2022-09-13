@@ -29,7 +29,6 @@ import (
 	coreV1 "k8s.io/api/core/v1"
 	networkingV1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -164,7 +163,7 @@ func (r *ClusterManagerReconciler) UpdateClusterManagerStatus(ctx context.Contex
 
 func (r *ClusterManagerReconciler) ChangeVolumeReclaimPolicy(ctx context.Context, clusterManager *clusterV1alpha1.ClusterManager) (ctrl.Result, error) {
 	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
-	log.Info("Start to reconcile phase for ChangeVolumeReclaimPolicy")
+	log.V(4).Info("Start to reconcile phase for ChangeVolumeReclaimPolicy")
 
 	key := types.NamespacedName{
 		Name:      fmt.Sprintf("%s-volume-claim", clusterManager.Name),
@@ -229,7 +228,7 @@ func (r *ClusterManagerReconciler) ChangeVolumeReclaimPolicy(ctx context.Context
 }
 
 func (r *ClusterManagerReconciler) CreatePersistentVolumeClaim(ctx context.Context, clusterManager *clusterV1alpha1.ClusterManager) (ctrl.Result, error) {
-	if meta.FindStatusCondition(clusterManager.GetConditions(), string(clusterV1alpha1.VolumeReadyCondition)) != nil {
+	if util.CheckConditionExist(clusterManager.GetConditions(), clusterV1alpha1.VolumeReadyCondition) {
 		return ctrl.Result{}, nil
 	}
 

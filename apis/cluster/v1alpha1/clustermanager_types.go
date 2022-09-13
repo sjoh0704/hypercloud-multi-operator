@@ -123,21 +123,17 @@ type ProviderVsphereSpec struct {
 
 // ClusterManagerStatus defines the observed state of ClusterManager
 type ClusterManagerStatus struct {
-	Provider              string              `json:"provider,omitempty"`
-	Version               string              `json:"version,omitempty"`
-	Ready                 bool                `json:"ready,omitempty"`
-	MasterRun             int                 `json:"masterRun,omitempty"`
-	WorkerRun             int                 `json:"workerRun,omitempty"`
-	FailureReason         *string             `json:"failureReason,omitempty"`
-	Phase                 ClusterManagerPhase `json:"phase,omitempty"`
-	ControlPlaneEndpoint  string              `json:"controlPlaneEndpoint,omitempty"`
-	Conditions            []metav1.Condition  `json:"conditions,omitempty"`
-	ArgoReady             bool                `json:"argoReady,omitempty"`
-	TraefikReady          bool                `json:"traefikReady,omitempty"`
-	GatewayReady          bool                `json:"gatewayReady,omitempty"`
-	AuthClientReady       bool                `json:"authClientReady,omitempty"`
-	OpenSearchReady       bool                `json:"openSearchReady,omitempty"`
-	ApplicationLink       string              `json:"applicationLink,omitempty"`
+	Provider             string              `json:"provider,omitempty"`
+	Version              string              `json:"version,omitempty"`
+	Ready                bool                `json:"ready,omitempty"`
+	MasterRun            int                 `json:"masterRun,omitempty"`
+	WorkerRun            int                 `json:"workerRun,omitempty"`
+	FailureReason        *string             `json:"failureReason,omitempty"`
+	Phase                ClusterManagerPhase `json:"phase,omitempty"`
+	ControlPlaneEndpoint string              `json:"controlPlaneEndpoint,omitempty"`
+	Conditions           []metav1.Condition  `json:"conditions,omitempty"`
+	OpenSearchReady      bool                `json:"openSearchReady,omitempty"`
+	ApplicationLink      string              `json:"applicationLink,omitempty"`
 	// will be deprecated
 	PrometheusReady bool `json:"prometheusReady,omitempty"`
 	// HyperregistryOidcReady bool                    `json:"hyperregistryOidcReady,omitempty"`
@@ -157,17 +153,6 @@ const (
 	ClusterManagerPhaseDeleting = ClusterManagerPhase("Deleting")
 	// 클러스터 생성에 실패한 상태
 	ClusterManagerPhaseFailed = ClusterManagerPhase("Failed")
-)
-
-// deprecated phases
-const (
-	ClusterManagerDeprecatedPhasePending      = ClusterManagerPhase("Pending")
-	ClusterManagerDeprecatedPhaseProvisioning = ClusterManagerPhase("Provisioning")
-	ClusterManagerDeprecatedPhaseRegistering  = ClusterManagerPhase("Registering")
-	ClusterManagerDeprecatedPhaseProvisioned  = ClusterManagerPhase("Provisioned")
-	ClusterManagerDeprecatedPhaseRegistered   = ClusterManagerPhase("Registered")
-	ClusterManagerDeprecatedPhaseFailed       = ClusterManagerPhase("Failed")
-	ClusterManagerDeprecatedPhaseUnknown      = ClusterManagerPhase("Unknown")
 )
 
 const (
@@ -293,10 +278,6 @@ func (c *ClusterManager) GetNamespacedPrefix() string {
 
 func (c *ClusterManager) GetConditions() []metav1.Condition {
 	return c.Status.Conditions
-}
-
-func (c *ClusterManager) SetConditions(conditions []metav1.Condition) {
-	c.Status.Conditions = conditions
 }
 
 func (c *ClusterManager) SetApplicationLink(subdomain string) {

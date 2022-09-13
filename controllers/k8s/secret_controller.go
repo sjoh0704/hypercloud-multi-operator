@@ -106,7 +106,6 @@ func (r *SecretReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ c
 		}
 	}()
 
-	// nil pointer error
 	// capi에 의해 생성된 kubeconfig secret에는 secret type에 대한 Label이 달려있지 않으므로, annotation을 생성해준다.
 	if _, ok := secret.Labels[util.LabelKeyClmSecretType]; !ok {
 		if secret.Labels == nil {

@@ -93,6 +93,7 @@ func (r *ClusterManagerReconciler) requeueClusterManagersForJob(o client.Object)
 				clusterV1alpha1.InfrastructureProvisionedReadyCondition,
 				clusterV1alpha1.InfrastructureProvisioningReconciliationFailedReason,
 				metaV1.ConditionFalse)
+
 			log.Error(fmt.Errorf(failedReason), "Failed to provision infrastructure")
 
 		} else if job.Annotations[clusterV1alpha1.AnnotationKeyJobType] == clusterV1alpha1.InstallingK8s {

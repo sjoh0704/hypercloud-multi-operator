@@ -252,10 +252,15 @@ func (r *ClusterManagerReconciler) reconcile(ctx context.Context, clusterManager
 			// r.kubeadmControlPlaneUpdate,
 			// cluster claim 을 통해, cluster 의 spec 을 변경한 경우, 그에 맞게 worker 노드의 spec 을 업데이트 해준다.
 			// r.machineDeploymentUpdate,
+			// terraform을 통해서 인프라를 형성한다. 
 			r.ProvisioningInfra,
+			// terraform을 통해서 생성된 인프라에 ansible을 통해서 k8s를 install한다.
 			r.InstallK8s,
+			// pv에 저장된 kubeconfig를 kubectl image container를 통해 kubeconfig를 생성한다. 
 			r.CreateKubeconfig,
+			// pvc를 생성한다. pvc는 한 context 내 모든 job들이 공유해서 사용한다.   
 			r.CreatePersistentVolumeClaim,
+			// pv를 공유해서 사용하기 위한 세팅을 설정한다. 
 			r.ChangeVolumeReclaimPolicy,
 		)
 	} else {
@@ -321,27 +326,28 @@ func (r *ClusterManagerReconciler) reconcileDelete(ctx context.Context, clusterM
 		Name:      clusterManager.Name + util.KubeconfigSuffix,
 		Namespace: clusterManager.Namespace,
 	}
-	// kubeconfigSecret := &coreV1.Secret{}
-	// if err := r.Get(context.TODO(), key, kubeconfigSecret); err != nil && !errors.IsNotFound(err) {
-	// 	log.Error(err, "Failed to get kubeconfig secret")
-	// 	return ctrl.Result{}, err
-	// }
+	kubeconfigSecret := &coreV1.Secret{}
+	if err := r.Get(context.TODO(), key, kubeconfigSecret); err != nil && !errors.IsNotFound(err) {
+		log.Error(err, "Failed to get kubeconfig secret")
+		return ctrl.Result{}, err
+	}
 
 	// ArgoCD application이 모두 삭제되었는지 테스트
-	// if err := r.CheckApplicationRemains(clusterManager); err != nil {
-	// 	return ctrl.Result{}, err
-	// }
+	if err := r.CheckApplicationRemains(clusterManager); err != nil {
+		return ctrl.Result{}, err
+	}
 
 	// ClusterAPI-provider-aws의 경우, lb type의 svc가 남아있으면 infra nlb deletion이 stuck걸리면서 클러스터가 지워지지 않는 버그가 있음
 	// 이를 해결하기 위해 클러스터를 삭제하기 전에 lb type의 svc를 전체 삭제한 후 클러스터를 삭제
-	// if err := r.DeleteLoadBalancerServices(clusterManager); err != nil {
-	// 	return ctrl.Result{}, err
-	// }
+	if err := r.DeleteLoadBalancerServices(clusterManager); err != nil {
+		return ctrl.Result{}, err
+	}
 
-	// if err := r.DeleteTraefikResources(clusterManager); err != nil {
-	// 	return ctrl.Result{}, err
-	// }
+	if err := r.DeleteTraefikResources(clusterManager); err != nil {
+		return ctrl.Result{}, err
+	}
 
+	// sjoh 임시
 	// if err := r.DeleteHyperAuthResourcesForSingleCluster(clusterManager); err != nil {
 	// 	return ctrl.Result{}, err
 	// }
@@ -381,6 +387,7 @@ func (r *ClusterManagerReconciler) reconcileDelete(ctx context.Context, clusterM
 		return ctrl.Result{}, nil
 	}
 
+	// sjoh 임시
 	// hypercloud api server를 통해서 cluster member를 삭제하는 작업
 	// if err := util.Delete(clusterManager.Namespace, clusterManager.Name); err != nil {
 	// 	log.Error(err, "Failed to delete cluster info from cluster_member table")
@@ -401,11 +408,6 @@ func (r *ClusterManagerReconciler) reconcilePhase(_ context.Context, clusterMana
 		return
 	} else {
 		clusterManager.Status.SetTypedPhase(clusterV1alpha1.ClusterManagerPhaseProcessing)
-	}
-
-	if clusterManager.Status.FailureReason != nil {
-		clusterManager.Status.SetTypedPhase(clusterV1alpha1.ClusterManagerPhaseFailed)
-		return
 	}
 
 	if util.CheckConditionExistAndConditionTrue(clusterManager.GetConditions(), clusterV1alpha1.ArgoReadyCondition) {
