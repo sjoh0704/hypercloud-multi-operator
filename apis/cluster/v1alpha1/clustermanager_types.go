@@ -15,11 +15,10 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"os"
 	"strings"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+
 )
 
 // type NodeInfo struct {
@@ -278,22 +277,4 @@ func (c *ClusterManager) GetNamespacedPrefix() string {
 
 func (c *ClusterManager) GetConditions() []metav1.Condition {
 	return c.Status.Conditions
-}
-
-func (c *ClusterManager) SetApplicationLink(subdomain string) {
-	c.Status.ApplicationLink = strings.Join(
-		[]string{
-			"https://",
-			subdomain,
-			".",
-			os.Getenv("HC_DOMAIN"),
-			"/applications/",
-			c.GetNamespacedPrefix(),
-			"-applications?node=argoproj.io/Application/argocd/",
-			c.GetNamespacedPrefix(),
-			"-applications/0&resource=",
-			"",
-		},
-		"",
-	)
 }

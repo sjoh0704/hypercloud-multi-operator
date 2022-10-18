@@ -38,8 +38,8 @@ func (r *ClusterClaimReconciler) CreateClusterManager(ctx context.Context, cc *c
 				Annotations: map[string]string{
 					"owner":                                cc.Annotations[util.AnnotationKeyCreator],
 					"creator":                              cc.Annotations[util.AnnotationKeyCreator],
-					clusterV1alpha1.AnnotationKeyClmDomain: os.Getenv("HC_DOMAIN"),
 					clusterV1alpha1.AnnotationKeyClmSuffix: util.CreateSuffixString(),
+					clusterV1alpha1.AnnotationKeyClmDomain: os.Getenv(util.HC_DOMAIN),
 				},
 			},
 			Spec: clusterV1alpha1.ClusterManagerSpec{

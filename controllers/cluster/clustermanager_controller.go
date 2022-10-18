@@ -59,6 +59,7 @@ type ClusterParameter struct {
 	WorkerNum         int
 	Owner             string
 	KubernetesVersion string
+	HyperAuthUrl      string
 }
 
 type AwsParameter struct {
@@ -146,96 +147,59 @@ func (r *ClusterManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, nil
 	}
 
-	if clusterManager.Labels[clusterV1alpha1.LabelKeyClmClusterType] == clusterV1alpha1.ClusterTypeRegistered {
-		// Handle deletion reconciliation loop.
-		if !clusterManager.ObjectMeta.DeletionTimestamp.IsZero() {
-			clusterManager.Status.Ready = false
-			return r.reconcileDeleteForRegisteredClusterManager(context.TODO(), clusterManager)
-		}
-		// return r.reconcileForRegisteredClusterManager(context.TODO(), clusterManager)
-	} else {
-		// Handle deletion reconciliation loop.
-		if !clusterManager.ObjectMeta.DeletionTimestamp.IsZero() {
-			clusterManager.Status.Ready = false
-			return r.reconcileDelete(context.TODO(), clusterManager)
-		}
-		// return r.reconcile(context.TODO(), clusterManager)
+	// Handle deletion reconciliation loop.
+	if !clusterManager.ObjectMeta.DeletionTimestamp.IsZero() {
+		clusterManager.Status.Ready = false
+		return r.reconcileDelete(context.TODO(), clusterManager)
 	}
 
 	// Handle normal reconciliation loop.
 	return r.reconcile(context.TODO(), clusterManager)
 }
 
-// reconcile handles cluster reconciliation.
-// func (r *ClusterManagerReconciler) reconcileForRegisteredClusterManager(ctx context.Context, clusterManager *clusterV1alpha1.ClusterManager) (ctrl.Result, error) {
-// 	phases := []func(context.Context, *clusterV1alpha1.ClusterManager) (ctrl.Result, error){
-// 		r.UpdateClusterManagerStatus,
-// 		r.CreateTraefikResources,
-// 		r.CreateArgocdClusterSecret,
-// 		r.CreateMonitoringResources,
-// 		r.CreateHyperauthClient,
-// 		r.SetHyperregistryOidcConfig,
+// func (r *ClusterManagerReconciler) reconcileDeleteForRegisteredClusterManager(ctx context.Context, clusterManager *clusterV1alpha1.ClusterManager) (reconcile.Result, error) {
+// 	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
+// 	log.Info("Start to reconcile delete for registered ClusterManager")
+
+// 	// cluster member crb 는 db 에 저장되어있는 member 의 정보로 삭제 되어지기 때문에, crb 를 지운후 db 에서 삭제 해야한다.
+// 	// if err := util.Delete(clusterManager.Namespace, clusterManager.Name); err != nil {
+// 	// 	log.Error(err, "Failed to delete cluster info from cluster_member table")
+// 	// 	return ctrl.Result{}, err
+// 	// }
+
+// 	key := types.NamespacedName{
+// 		Name:      clusterManager.Name + util.KubeconfigSuffix,
+// 		Namespace: clusterManager.Namespace,
+// 	}
+// 	kubeconfigSecret := &coreV1.Secret{}
+// 	if err := r.Get(context.TODO(), key, kubeconfigSecret); err != nil && !errors.IsNotFound(err) {
+// 		log.Error(err, "Failed to get kubeconfig Secret")
+// 		return ctrl.Result{}, err
+// 	} else if err == nil {
+// 		if err := r.Delete(context.TODO(), kubeconfigSecret); err != nil {
+// 			log.Error(err, "Failed to delete kubeconfig Secret")
+// 			return ctrl.Result{}, err
+// 		}
+
+// 		log.Info("Delete kubeconfig Secret successfully")
 // 	}
 
-// 	res := ctrl.Result{}
-// 	errs := []error{}
-// 	for _, phase := range phases {
-// 		// Call the inner reconciliation methods.
-// 		phaseResult, err := phase(ctx, clusterManager)
-// 		if err != nil {
-// 			errs = append(errs, err)
-// 		}
-// 		if len(errs) > 0 {
-// 			continue
-// 		}
-// 		res = util.LowestNonZeroResult(res, phaseResult)
+// 	// ArgoCD application이 모두 삭제되었는지 테스트
+// 	if err := r.CheckApplicationRemains(clusterManager); err != nil {
+// 		return ctrl.Result{}, err
 // 	}
-// 	return res, kerrors.NewAggregate(errs)
+
+// 	if err := r.DeleteTraefikResources(clusterManager); err != nil {
+// 		return ctrl.Result{}, err
+// 	}
+
+// 	if err := r.DeleteHyperAuthResourcesForSingleCluster(clusterManager); err != nil {
+// 		return ctrl.Result{}, err
+// 	}
+
+// 	controllerutil.RemoveFinalizer(clusterManager, clusterV1alpha1.ClusterManagerFinalizer)
+// 	return ctrl.Result{}, nil
 // }
-
-func (r *ClusterManagerReconciler) reconcileDeleteForRegisteredClusterManager(ctx context.Context, clusterManager *clusterV1alpha1.ClusterManager) (reconcile.Result, error) {
-	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
-	log.Info("Start to reconcile delete for registered ClusterManager")
-
-	// cluster member crb 는 db 에 저장되어있는 member 의 정보로 삭제 되어지기 때문에, crb 를 지운후 db 에서 삭제 해야한다.
-	// if err := util.Delete(clusterManager.Namespace, clusterManager.Name); err != nil {
-	// 	log.Error(err, "Failed to delete cluster info from cluster_member table")
-	// 	return ctrl.Result{}, err
-	// }
-
-	key := types.NamespacedName{
-		Name:      clusterManager.Name + util.KubeconfigSuffix,
-		Namespace: clusterManager.Namespace,
-	}
-	kubeconfigSecret := &coreV1.Secret{}
-	if err := r.Get(context.TODO(), key, kubeconfigSecret); err != nil && !errors.IsNotFound(err) {
-		log.Error(err, "Failed to get kubeconfig Secret")
-		return ctrl.Result{}, err
-	} else if err == nil {
-		if err := r.Delete(context.TODO(), kubeconfigSecret); err != nil {
-			log.Error(err, "Failed to delete kubeconfig Secret")
-			return ctrl.Result{}, err
-		}
-
-		log.Info("Delete kubeconfig Secret successfully")
-	}
-
-	// ArgoCD application이 모두 삭제되었는지 테스트
-	if err := r.CheckApplicationRemains(clusterManager); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	if err := r.DeleteTraefikResources(clusterManager); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	if err := r.DeleteHyperAuthResourcesForSingleCluster(clusterManager); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	controllerutil.RemoveFinalizer(clusterManager, clusterV1alpha1.ClusterManagerFinalizer)
-	return ctrl.Result{}, nil
-}
 
 // reconcile handles cluster reconciliation.
 func (r *ClusterManagerReconciler) reconcile(ctx context.Context, clusterManager *clusterV1alpha1.ClusterManager) (ctrl.Result, error) {
@@ -252,15 +216,15 @@ func (r *ClusterManagerReconciler) reconcile(ctx context.Context, clusterManager
 			// r.kubeadmControlPlaneUpdate,
 			// cluster claim 을 통해, cluster 의 spec 을 변경한 경우, 그에 맞게 worker 노드의 spec 을 업데이트 해준다.
 			// r.machineDeploymentUpdate,
-			// terraform을 통해서 인프라를 형성한다. 
+			// terraform을 통해서 인프라를 형성한다.
 			r.ProvisioningInfra,
 			// terraform을 통해서 생성된 인프라에 ansible을 통해서 k8s를 install한다.
 			r.InstallK8s,
-			// pv에 저장된 kubeconfig를 kubectl image container를 통해 kubeconfig를 생성한다. 
+			// pv에 저장된 kubeconfig를 kubectl image container를 통해 kubeconfig를 생성한다.
 			r.CreateKubeconfig,
-			// pvc를 생성한다. pvc는 한 context 내 모든 job들이 공유해서 사용한다.   
+			// pvc를 생성한다. pvc는 한 context 내 모든 job들이 공유해서 사용한다.
 			r.CreatePersistentVolumeClaim,
-			// pv를 공유해서 사용하기 위한 세팅을 설정한다. 
+			// pv를 공유해서 사용하기 위한 세팅을 설정한다.
 			r.ChangeVolumeReclaimPolicy,
 		)
 	} else {
@@ -322,19 +286,19 @@ func (r *ClusterManagerReconciler) reconcileDelete(ctx context.Context, clusterM
 	log := r.Log.WithValues("clustermanager", clusterManager.GetNamespacedName())
 	log.Info("Start reconcile phase for delete")
 
-	key := types.NamespacedName{
-		Name:      clusterManager.Name + util.KubeconfigSuffix,
-		Namespace: clusterManager.Namespace,
-	}
-	kubeconfigSecret := &coreV1.Secret{}
-	if err := r.Get(context.TODO(), key, kubeconfigSecret); err != nil && !errors.IsNotFound(err) {
-		log.Error(err, "Failed to get kubeconfig secret")
-		return ctrl.Result{}, err
-	}
+	// sjoh - kubeconfig가 없으면 cluster가 삭제된 것을 가정, 없으면 skip한다.
+	// key := types.NamespacedName{
+	// 	Name:      clusterManager.Name + util.KubeconfigSuffix,
+	// 	Namespace: clusterManager.Namespace,
+	// }
+	// if err := r.Get(context.TODO(), key, kubeconfigSecret); err != nil && !errors.IsNotFound(err) {
+	// 	log.Error(err, "Failed to get kubeconfig secret")
+	// 	return ctrl.Result{}, err
+	// }
 
 	// ArgoCD application이 모두 삭제되었는지 테스트
 	if err := r.CheckApplicationRemains(clusterManager); err != nil {
-		return ctrl.Result{}, err
+		return ctrl.Result{RequeueAfter: requeueAfter10Second}, err
 	}
 
 	// ClusterAPI-provider-aws의 경우, lb type의 svc가 남아있으면 infra nlb deletion이 stuck걸리면서 클러스터가 지워지지 않는 버그가 있음
@@ -352,39 +316,60 @@ func (r *ClusterManagerReconciler) reconcileDelete(ctx context.Context, clusterM
 	// 	return ctrl.Result{}, err
 	// }
 
-	key = types.NamespacedName{
-		Name:      fmt.Sprintf("%s-destroy-infra", clusterManager.Name),
+	// kubeconfig 삭제
+	key := types.NamespacedName{
+		Name:      clusterManager.Name + util.KubeconfigSuffix,
 		Namespace: clusterManager.Namespace,
 	}
-
-	dij := &batchV1.Job{}
-	if err := r.Get(context.TODO(), key, dij); errors.IsNotFound(err) {
-		log.Info("Create destroy job")
-
-		dij, err := r.DestroyInfrastrucutreJob(clusterManager)
-		if err != nil {
-			log.Error(err, "Fail to create destroy job")
-			return ctrl.Result{}, nil
-		}
-
-		err = r.Create(context.TODO(), dij)
-		if err != nil {
-			log.Error(err, "Fail to create destroy job")
-			return ctrl.Result{}, nil
-		}
-		return ctrl.Result{RequeueAfter: requeueAfter10Second}, nil
-
+	kubeconfigSecret := &coreV1.Secret{}
+	if err := r.Get(context.TODO(), key, kubeconfigSecret); errors.IsNotFound(err) {
+		log.Info("Kubeconfig secret for cluster was deleted successfully")
 	} else if err != nil {
-		log.Error(err, "Failed to get destroy job")
+		log.Error(err, "Failed to get kubeconfig secret for cluster")
 		return ctrl.Result{}, err
+	} else {
+		if err := r.Delete(context.TODO(), kubeconfigSecret); err != nil {
+			log.Error(err, "Failed to delete kubeconfig secret for cluster")
+			return ctrl.Result{}, err
+		}
+		log.Info("Kubeconfig secret for cluster is deleting")
 	}
 
-	if dij.Status.Active == 1 {
-		log.Info("Wait for cluster to be deleted")
-		return ctrl.Result{RequeueAfter: requeueAfter30Second}, nil
-	} else if dij.Status.Failed == 1 {
-		log.Error(nil, "Fail to destroy cluster")
-		return ctrl.Result{}, nil
+	// 생성 타입인지, 등록 타입인지에 따른 분기 처리
+	if clusterManager.Labels[clusterV1alpha1.LabelKeyClmClusterType] == clusterV1alpha1.ClusterTypeCreated {
+		key := types.NamespacedName{
+			Name:      fmt.Sprintf("%s-destroy-infra", clusterManager.Name),
+			Namespace: clusterManager.Namespace,
+		}
+
+		dij := &batchV1.Job{}
+		if err := r.Get(context.TODO(), key, dij); errors.IsNotFound(err) {
+			log.Info("Create destroy job")
+
+			dij, err := r.DestroyInfrastrucutreJob(clusterManager)
+			if err != nil {
+				log.Error(err, "Fail to create destroy job")
+				return ctrl.Result{}, nil
+			}
+
+			err = r.Create(context.TODO(), dij)
+			if err != nil {
+				log.Error(err, "Fail to create destroy job")
+				return ctrl.Result{}, nil
+			}
+			return ctrl.Result{RequeueAfter: requeueAfter10Second}, nil
+		} else if err != nil {
+			log.Error(err, "Failed to get destroy job")
+			return ctrl.Result{}, err
+		}
+
+		if dij.Status.Active == 1 {
+			log.Info("Wait for cluster to be deleted")
+			return ctrl.Result{RequeueAfter: requeueAfter30Second}, nil
+		} else if dij.Status.Failed == 1 {
+			log.Error(nil, "Fail to destroy cluster")
+			return ctrl.Result{}, nil
+		}
 	}
 
 	// sjoh 임시
@@ -393,6 +378,19 @@ func (r *ClusterManagerReconciler) reconcileDelete(ctx context.Context, clusterM
 	// 	log.Error(err, "Failed to delete cluster info from cluster_member table")
 	// 	return ctrl.Result{}, err
 	// }
+	
+	key = types.NamespacedName{
+		Name:      clusterManager.Name + util.KubeconfigSuffix,
+		Namespace: clusterManager.Namespace,
+	}
+	if err := r.Get(context.TODO(), key, &coreV1.Secret{}); errors.IsNotFound(err) {
+		controllerutil.RemoveFinalizer(clusterManager, clusterV1alpha1.ClusterManagerFinalizer)
+		log.Info("Cluster manager was deleted successfully")
+		return ctrl.Result{}, nil
+	} else if err != nil {
+		log.Error(err, "Failed to get kubeconfig secret")
+		return ctrl.Result{}, err
+	}
 
 	controllerutil.RemoveFinalizer(clusterManager, clusterV1alpha1.ClusterManagerFinalizer)
 	return ctrl.Result{}, nil
