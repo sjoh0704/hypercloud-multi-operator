@@ -42,6 +42,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/yaml"
+	rbacV1 "k8s.io/api/rbac/v1"
 )
 
 func (r *ClusterManagerReconciler) UpdateClusterManagerStatus(ctx context.Context, clusterManager *clusterV1alpha1.ClusterManager) (ctrl.Result, error) {
@@ -430,10 +431,52 @@ func (r *ClusterManagerReconciler) CreateKubeconfig(ctx context.Context, cluster
 		return ctrl.Result{}, nil
 	}
 
+	// kubectl serviceaccount, role, rolebindng 생성
+
 	key = types.NamespacedName{
-		Name:      fmt.Sprintf("%s-create-kubeconfig", clusterManager.Name),
-		Namespace: clusterManager.Namespace,
+		Name:      fmt.Sprintf("%s-kubectl", clusterManager.Name),
+		Namespace: clusterManager.Namespace, 
 	}
+	// kubectl serviceaccount 생성
+	if err := r.Get(context.TODO(), key, &coreV1.ServiceAccount{}); errors.IsNotFound(err) {
+		kubectlSA, err := r.KubectlSA(clusterManager)
+		if err != nil {
+			log.Error(err, "Failed to create kubectl serivce account")
+			return ctrl.Result{}, err
+		}
+
+		if err = r.Create(context.TODO(), kubectlSA); err != nil {
+			log.Error(err, "Failed to create kubectl serivce account")
+			return ctrl.Result{}, err
+		}
+	}
+	// kubectl role 생성
+	if err := r.Get(context.TODO(), key, &rbacV1.Role{}); errors.IsNotFound(err) {
+		kubectlRole, err := r.KubectlRole(clusterManager)
+		if err != nil {
+			log.Error(err, "Failed to create kubectl role")
+			return ctrl.Result{}, err
+		}
+
+		if err = r.Create(context.TODO(), kubectlRole); err != nil {
+			log.Error(err, "Failed to create kubectl role")
+			return ctrl.Result{}, err
+		}
+	}
+	// kubectl rolebinding 생성 
+	if err := r.Get(context.TODO(), key, &rbacV1.RoleBinding{}); errors.IsNotFound(err) {
+		kubectlRoleBinding, err := r.KubectlRoleBinding(clusterManager)
+		if err != nil {
+			log.Error(err, "Failed to create kubectl role binding")
+			return ctrl.Result{}, err
+		}
+
+		if err = r.Create(context.TODO(), kubectlRoleBinding); err != nil {
+			log.Error(err, "Failed to create kubectl role binding")
+			return ctrl.Result{}, err
+		}
+	}
+
 
 	if err := r.Get(context.TODO(), key, &batchV1.Job{}); errors.IsNotFound(err) {
 
@@ -441,12 +484,12 @@ func (r *ClusterManagerReconciler) CreateKubeconfig(ctx context.Context, cluster
 
 		if err != nil {
 			log.Error(err, "Failed to create create-kubeconfig job")
-			return ctrl.Result{}, nil
+			return ctrl.Result{}, err
 		}
 
 		if err = r.Create(context.TODO(), ckj); err != nil {
 			log.Error(err, "Failed to create create-kubeconfig job")
-			return ctrl.Result{}, nil
+			return ctrl.Result{}, err
 		}
 
 		util.SetStatusCondition(&clusterManager.Status.Conditions,
