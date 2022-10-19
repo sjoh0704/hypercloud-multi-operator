@@ -1,7 +1,35 @@
 apiVersion: claim.tmax.io/v1alpha1
 kind: ClusterClaim
 metadata:
-  name: clusterclaim-sample
+  name: cc1
+  namespace: sjoh
+  annotations:
+    creator: admin@tmax.co.kr
+    updater: admin@tmax.co.kr
 spec:
-  # Add fields here
-  foo: bar
+  clusterName: clm1
+  version: v1.19.4
+  provider: AWS
+  masterNum: 1
+  workerNum: 1
+  providerAwsSpec:
+    region: ap-northeast-2
+    bastion:
+      type: t3.micro
+      num: 1
+    master:
+      type: t3.large
+      diskSize: 50
+    worker:
+      type: t3.large
+    hostOs: rhel
+    networkSpec:
+      vpcCidrBlock: 10.0.0.0/16
+      privateSubnetCidrBlock:
+      - 10.0.1.0/24
+      - 10.0.2.0/24
+      publicSubnetCidrBlock:
+      - 10.0.3.0/24
+      - 10.0.4.0/24
+    additionalTags:
+      Name: test-tag

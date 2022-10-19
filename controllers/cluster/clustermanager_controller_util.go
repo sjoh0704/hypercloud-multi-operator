@@ -32,6 +32,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	coreV1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	rbacV1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -55,6 +56,84 @@ func SetApplicationLink(c *clusterV1alpha1.ClusterManager, subdomain string) {
 		},
 		"",
 	)
+}
+
+func (r *ClusterManagerReconciler) KubectlSA(clusterManager *clusterV1alpha1.ClusterManager) (*coreV1.ServiceAccount, error) {
+
+	kubectlSA := &coreV1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-kubectl", clusterManager.Name),
+			Namespace: clusterManager.Namespace,
+			Annotations: map[string]string{
+				clusterV1alpha1.AnnotationKeyJobType: clusterV1alpha1.CreatingKubeconfig,
+			},
+			Labels: map[string]string{
+				clusterV1alpha1.LabelKeyClmName:      clusterManager.Name,
+				clusterV1alpha1.LabelKeyClmNamespace: clusterManager.Namespace,
+			},
+		},
+	}
+
+	ctrl.SetControllerReference(clusterManager, kubectlSA, r.Scheme)
+	return kubectlSA, nil
+}
+
+func (r *ClusterManagerReconciler) KubectlRole(clusterManager *clusterV1alpha1.ClusterManager) (*rbacV1.Role, error) {
+
+	kubectlRole := &rbacV1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-kubectl", clusterManager.Name),
+			Namespace: clusterManager.Namespace,
+			Annotations: map[string]string{
+				clusterV1alpha1.AnnotationKeyJobType: clusterV1alpha1.CreatingKubeconfig,
+			},
+			Labels: map[string]string{
+				clusterV1alpha1.LabelKeyClmName:      clusterManager.Name,
+				clusterV1alpha1.LabelKeyClmNamespace: clusterManager.Namespace,
+			},
+		},
+		Rules: []rbacV1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"create", "list", "delete"},
+			},
+		},
+	}
+
+	ctrl.SetControllerReference(clusterManager, kubectlRole, r.Scheme)
+	return kubectlRole, nil
+}
+
+func (r *ClusterManagerReconciler) KubectlRoleBinding(clusterManager *clusterV1alpha1.ClusterManager) (*rbacV1.RoleBinding, error) {
+
+	kubectlRoleBinding := &rbacV1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-kubectl", clusterManager.Name),
+			Namespace: clusterManager.Namespace,
+			Annotations: map[string]string{
+				clusterV1alpha1.AnnotationKeyJobType: clusterV1alpha1.CreatingKubeconfig,
+			},
+			Labels: map[string]string{
+				clusterV1alpha1.LabelKeyClmName:      clusterManager.Name,
+				clusterV1alpha1.LabelKeyClmNamespace: clusterManager.Namespace,
+			},
+		},
+		Subjects: []rbacV1.Subject{
+			{
+				Kind: "ServiceAcount",
+				Name: fmt.Sprintf("%s-kubectl", clusterManager.Name),
+			},
+		},
+		RoleRef: rbacV1.RoleRef{
+			Kind:     "Role",
+			Name:     fmt.Sprintf("%s-kubectl", clusterManager.Name),
+			APIGroup: "rbac.authorization.k8s.io",
+		},
+	}
+
+	ctrl.SetControllerReference(clusterManager, kubectlRoleBinding, r.Scheme)
+	return kubectlRoleBinding, nil
 }
 
 func (r *ClusterManagerReconciler) DestroyInfrastrucutreJob(clusterManager *clusterV1alpha1.ClusterManager) (*batchv1.Job, error) {
@@ -154,7 +233,7 @@ func (r *ClusterManagerReconciler) CreateKubeconfigJob(clusterManager *clusterV1
 		Spec: batchv1.JobSpec{
 			Template: coreV1.PodTemplateSpec{
 				Spec: coreV1.PodSpec{
-					ServiceAccountName:           "kubectl",
+					ServiceAccountName:           fmt.Sprintf("%s-kubectl", clusterManager.Name),
 					AutomountServiceAccountToken: &serviceAutoMount,
 					Containers: []coreV1.Container{
 						{
@@ -1187,10 +1266,6 @@ func (r *ClusterManagerReconciler) DeleteLoadBalancerServices(clusterManager *cl
 	}
 
 	for _, ns := range nsList.Items {
-		//  sjoh 임시
-		// if ns.Name == util.KubeNamespace {
-		// 	continue
-		// }
 
 		svcList, err := remoteClientset.CoreV1().Services(ns.Name).List(context.TODO(), metav1.ListOptions{})
 		if err != nil {

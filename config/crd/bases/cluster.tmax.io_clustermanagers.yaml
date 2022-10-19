@@ -1,6 +1,6 @@
 
 ---
-apiVersion: apiextensions.k8s.io/v1beta1
+apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
@@ -8,39 +8,6 @@ metadata:
   creationTimestamp: null
   name: clustermanagers.cluster.tmax.io
 spec:
-  additionalPrinterColumns:
-  - JSONPath: .spec.provider
-    description: provider
-    name: Provider
-    type: string
-  - JSONPath: .spec.version
-    description: k8s version
-    name: Version
-    type: string
-  - JSONPath: .status.ready
-    description: is running
-    name: Ready
-    type: string
-  - JSONPath: .spec.masterNum
-    description: replica number of master
-    name: MasterNum
-    type: string
-  - JSONPath: .status.masterRun
-    description: running of master
-    name: MasterRun
-    type: string
-  - JSONPath: .spec.workerNum
-    description: replica number of worker
-    name: WorkerNum
-    type: string
-  - JSONPath: .status.workerRun
-    description: running of worker
-    name: WorkerRun
-    type: string
-  - JSONPath: .status.phase
-    description: cluster status phase
-    name: Phase
-    type: string
   group: cluster.tmax.io
   names:
     kind: ClusterManager
@@ -49,269 +16,300 @@ spec:
     shortNames:
     - clm
     singular: clustermanager
-  preserveUnknownFields: false
   scope: Namespaced
-  subresources:
-    status: {}
-  validation:
-    openAPIV3Schema:
-      description: ClusterManager is the Schema for the clustermanagers API
-      properties:
-        apiVersion:
-          description: 'APIVersion defines the versioned schema of this representation
-            of an object. Servers should convert recognized schemas to the latest
-            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
-          type: string
-        awsSpec:
-          description: ProviderAwsSpec defines
-          properties:
-            additionalTags:
-              additionalProperties:
-                type: string
-              description: The additional tag attached to aws resources
-              type: object
-            bastion:
-              description: The info of bastion instance
-              properties:
-                diskSize:
-                  description: InstanceDiskSize
-                  type: integer
-                num:
-                  description: InstanceNum
-                  type: integer
-                type:
-                  description: InstanceType
-                  type: string
-              type: object
-            hostOs:
-              description: The type of OS that instances(master, worker, bastion)
-                use
-              type: string
-            master:
-              description: The info of master instance
-              properties:
-                diskSize:
-                  description: InstanceDiskSize
-                  type: integer
-                num:
-                  description: InstanceNum
-                  type: integer
-                type:
-                  description: InstanceType
-                  type: string
-              type: object
-            networkSpec:
-              description: The network spec that cluster uses
-              properties:
-                privateSubnetCidrBlock:
-                  items:
-                    type: string
-                  type: array
-                publicSubnetCidrBlock:
-                  items:
-                    type: string
-                  type: array
-                vpcCidrBlock:
-                  type: string
-              type: object
-            region:
-              description: The region where VM is working
-              type: string
-            worker:
-              description: The info of worker instance
-              properties:
-                diskSize:
-                  description: InstanceDiskSize
-                  type: integer
-                num:
-                  description: InstanceNum
-                  type: integer
-                type:
-                  description: InstanceType
-                  type: string
-              type: object
-          type: object
-        kind:
-          description: 'Kind is a string value representing the REST resource this
-            object represents. Servers may infer this from the endpoint the client
-            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
-          type: string
-        metadata:
-          type: object
-        spec:
-          description: ClusterManagerSpec defines the desired state of ClusterManager
-          properties:
-            masterNum:
-              description: The number of master node
-              type: integer
-            provider:
-              description: The name of cloud provider where VM is created
-              type: string
-            version:
-              description: The version of kubernetes
-              type: string
-            workerNum:
-              description: The number of worker node
-              type: integer
-          required:
-          - masterNum
-          - provider
-          - version
-          - workerNum
-          type: object
-        status:
-          description: ClusterManagerStatus defines the observed state of ClusterManager
-          properties:
-            applicationLink:
-              type: string
-            conditions:
-              items:
-                description: "Condition contains details for one aspect of the current
-                  state of this API Resource. --- This struct is intended for direct
-                  use as an array at the field path .status.conditions.  For example,
-                  type FooStatus struct{     // Represents the observations of a foo's
-                  current state.     // Known .status.conditions.type are: \"Available\",
-                  \"Progressing\", and \"Degraded\"     // +patchMergeKey=type     //
-                  +patchStrategy=merge     // +listType=map     // +listMapKey=type
-                  \    Conditions []metav1.Condition `json:\"conditions,omitempty\"
-                  patchStrategy:\"merge\" patchMergeKey:\"type\" protobuf:\"bytes,1,rep,name=conditions\"`
-                  \n     // other fields }"
-                properties:
-                  lastTransitionTime:
-                    description: lastTransitionTime is the last time the condition
-                      transitioned from one status to another. This should be when
-                      the underlying condition changed.  If that is not known, then
-                      using the time when the API field changed is acceptable.
-                    format: date-time
-                    type: string
-                  message:
-                    description: message is a human readable message indicating details
-                      about the transition. This may be an empty string.
-                    maxLength: 32768
-                    type: string
-                  observedGeneration:
-                    description: observedGeneration represents the .metadata.generation
-                      that the condition was set based upon. For instance, if .metadata.generation
-                      is currently 12, but the .status.conditions[x].observedGeneration
-                      is 9, the condition is out of date with respect to the current
-                      state of the instance.
-                    format: int64
-                    minimum: 0
-                    type: integer
-                  reason:
-                    description: reason contains a programmatic identifier indicating
-                      the reason for the condition's last transition. Producers of
-                      specific condition types may define expected values and meanings
-                      for this field, and whether the values are considered a guaranteed
-                      API. The value should be a CamelCase string. This field may
-                      not be empty.
-                    maxLength: 1024
-                    minLength: 1
-                    pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
-                    type: string
-                  status:
-                    description: status of the condition, one of True, False, Unknown.
-                    enum:
-                    - "True"
-                    - "False"
-                    - Unknown
-                    type: string
-                  type:
-                    description: type of condition in CamelCase or in foo.example.com/CamelCase.
-                      --- Many .condition.type values are consistent across resources
-                      like Available, but because arbitrary conditions can be useful
-                      (see .node.status.conditions), the ability to deconflict is
-                      important. The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
-                    maxLength: 316
-                    pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
-                    type: string
-                required:
-                - lastTransitionTime
-                - message
-                - reason
-                - status
-                - type
-                type: object
-              type: array
-            controlPlaneEndpoint:
-              type: string
-            failureReason:
-              type: string
-            masterRun:
-              type: integer
-            openSearchReady:
-              type: boolean
-            phase:
-              type: string
-            prometheusReady:
-              description: will be deprecated
-              type: boolean
-            provider:
-              type: string
-            ready:
-              type: boolean
-            version:
-              type: string
-            workerRun:
-              type: integer
-          type: object
-        vsphereSpec:
-          description: ProviderVsphereSpec defines
-          properties:
-            podCidr:
-              description: The internal IP address cider block for pods
-              type: string
-            vcenterCpuNum:
-              description: The number of cpus for vm
-              type: integer
-            vcenterDataCenter:
-              description: The name of data center
-              type: string
-            vcenterDataStore:
-              description: The name of data store
-              type: string
-            vcenterDiskSize:
-              description: The disk size for vm
-              type: integer
-            vcenterFolder:
-              description: The name of folder
-              type: string
-            vcenterId:
-              description: The user id of VCSA
-              type: string
-            vcenterIp:
-              description: The IP address of vCenter Server Application(VCSA)
-              type: string
-            vcenterKcpIp:
-              description: The IP address of control plane for remote cluster(vip)
-              type: string
-            vcenterMemSize:
-              description: The memory size for vm
-              type: integer
-            vcenterNetwork:
-              description: The name of network
-              type: string
-            vcenterPassword:
-              description: The password of VCSA
-              type: string
-            vcenterResourcePool:
-              description: The name of resource pool
-              type: string
-            vcenterTemplate:
-              description: The template name for cloud init
-              type: string
-            vcenterThumbprint:
-              description: The TLS thumbprint of machine certificate
-              type: string
-          type: object
-      required:
-      - spec
-      type: object
-  version: v1alpha1
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - description: provider
+      jsonPath: .spec.provider
+      name: Provider
+      type: string
+    - description: k8s version
+      jsonPath: .spec.version
+      name: Version
+      type: string
+    - description: is running
+      jsonPath: .status.ready
+      name: Ready
+      type: string
+    - description: replica number of master
+      jsonPath: .spec.masterNum
+      name: MasterNum
+      type: string
+    - description: running of master
+      jsonPath: .status.masterRun
+      name: MasterRun
+      type: string
+    - description: replica number of worker
+      jsonPath: .spec.workerNum
+      name: WorkerNum
+      type: string
+    - description: running of worker
+      jsonPath: .status.workerRun
+      name: WorkerRun
+      type: string
+    - description: cluster status phase
+      jsonPath: .status.phase
+      name: Phase
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: ClusterManager is the Schema for the clustermanagers API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          awsSpec:
+            description: ProviderAwsSpec defines
+            properties:
+              additionalTags:
+                additionalProperties:
+                  type: string
+                description: The additional tag attached to aws resources
+                type: object
+              bastion:
+                description: The info of bastion instance
+                properties:
+                  diskSize:
+                    description: InstanceDiskSize
+                    type: integer
+                  num:
+                    description: InstanceNum
+                    type: integer
+                  type:
+                    description: InstanceType
+                    type: string
+                type: object
+              hostOs:
+                description: The type of OS that instances(master, worker, bastion)
+                  use
+                type: string
+              master:
+                description: The info of master instance
+                properties:
+                  diskSize:
+                    description: InstanceDiskSize
+                    type: integer
+                  num:
+                    description: InstanceNum
+                    type: integer
+                  type:
+                    description: InstanceType
+                    type: string
+                type: object
+              networkSpec:
+                description: The network spec that cluster uses
+                properties:
+                  privateSubnetCidrBlock:
+                    items:
+                      type: string
+                    type: array
+                  publicSubnetCidrBlock:
+                    items:
+                      type: string
+                    type: array
+                  vpcCidrBlock:
+                    type: string
+                type: object
+              region:
+                description: The region where VM is working
+                type: string
+              worker:
+                description: The info of worker instance
+                properties:
+                  diskSize:
+                    description: InstanceDiskSize
+                    type: integer
+                  num:
+                    description: InstanceNum
+                    type: integer
+                  type:
+                    description: InstanceType
+                    type: string
+                type: object
+            type: object
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ClusterManagerSpec defines the desired state of ClusterManager
+            properties:
+              masterNum:
+                description: The number of master node
+                type: integer
+              provider:
+                description: The name of cloud provider where VM is created
+                type: string
+              version:
+                description: The version of kubernetes
+                type: string
+              workerNum:
+                description: The number of worker node
+                type: integer
+            required:
+            - masterNum
+            - provider
+            - version
+            - workerNum
+            type: object
+          status:
+            description: ClusterManagerStatus defines the observed state of ClusterManager
+            properties:
+              applicationLink:
+                type: string
+              conditions:
+                items:
+                  description: "Condition contains details for one aspect of the current
+                    state of this API Resource. --- This struct is intended for direct
+                    use as an array at the field path .status.conditions.  For example,
+                    type FooStatus struct{     // Represents the observations of a
+                    foo's current state.     // Known .status.conditions.type are:
+                    \"Available\", \"Progressing\", and \"Degraded\"     // +patchMergeKey=type
+                    \    // +patchStrategy=merge     // +listType=map     // +listMapKey=type
+                    \    Conditions []metav1.Condition `json:\"conditions,omitempty\"
+                    patchStrategy:\"merge\" patchMergeKey:\"type\" protobuf:\"bytes,1,rep,name=conditions\"`
+                    \n     // other fields }"
+                  properties:
+                    lastTransitionTime:
+                      description: lastTransitionTime is the last time the condition
+                        transitioned from one status to another. This should be when
+                        the underlying condition changed.  If that is not known, then
+                        using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: message is a human readable message indicating
+                        details about the transition. This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: observedGeneration represents the .metadata.generation
+                        that the condition was set based upon. For instance, if .metadata.generation
+                        is currently 12, but the .status.conditions[x].observedGeneration
+                        is 9, the condition is out of date with respect to the current
+                        state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: reason contains a programmatic identifier indicating
+                        the reason for the condition's last transition. Producers
+                        of specific condition types may define expected values and
+                        meanings for this field, and whether the values are considered
+                        a guaranteed API. The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                        --- Many .condition.type values are consistent across resources
+                        like Available, but because arbitrary conditions can be useful
+                        (see .node.status.conditions), the ability to deconflict is
+                        important. The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              controlPlaneEndpoint:
+                type: string
+              failureReason:
+                type: string
+              masterRun:
+                type: integer
+              openSearchReady:
+                type: boolean
+              phase:
+                type: string
+              prometheusReady:
+                description: will be deprecated
+                type: boolean
+              provider:
+                type: string
+              ready:
+                type: boolean
+              version:
+                type: string
+              workerRun:
+                type: integer
+            type: object
+          vsphereSpec:
+            description: ProviderVsphereSpec defines
+            properties:
+              podCidr:
+                description: The internal IP address cider block for pods
+                type: string
+              vcenterCpuNum:
+                description: The number of cpus for vm
+                type: integer
+              vcenterDataCenter:
+                description: The name of data center
+                type: string
+              vcenterDataStore:
+                description: The name of data store
+                type: string
+              vcenterDiskSize:
+                description: The disk size for vm
+                type: integer
+              vcenterFolder:
+                description: The name of folder
+                type: string
+              vcenterId:
+                description: The user id of VCSA
+                type: string
+              vcenterIp:
+                description: The IP address of vCenter Server Application(VCSA)
+                type: string
+              vcenterKcpIp:
+                description: The IP address of control plane for remote cluster(vip)
+                type: string
+              vcenterMemSize:
+                description: The memory size for vm
+                type: integer
+              vcenterNetwork:
+                description: The name of network
+                type: string
+              vcenterPassword:
+                description: The password of VCSA
+                type: string
+              vcenterResourcePool:
+                description: The name of resource pool
+                type: string
+              vcenterTemplate:
+                description: The template name for cloud init
+                type: string
+              vcenterThumbprint:
+                description: The TLS thumbprint of machine certificate
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
     served: true
     storage: true
+    subresources:
+      status: {}
 status:
   acceptedNames:
     kind: ""
