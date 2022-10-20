@@ -37,3 +37,6 @@ build/test
 
 # text
 memo.txt
+
+# env
+.env 

@@ -2,8 +2,10 @@ package util
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 
+	"github.com/joho/godotenv"
 	clusterV1alpha1 "github.com/tmax-cloud/hypercloud-multi-operator/apis/cluster/v1alpha1"
 	coreV1 "k8s.io/api/core/v1"
 )
@@ -12,11 +14,22 @@ func CreateEnvFromClustermanagerSpec(clusterManager *clusterV1alpha1.ClusterMana
 
 	AwsSpec := clusterManager.AwsSpec
 	terraformAwsEnv := make(map[string]string)
-	
+
 	// map deep copy
 	for k, v := range TerraformAwsEnv {
 		terraformAwsEnv[k] = v
 	}
+
+	// TODO crendential한 값은 secret으로 대체 
+	// terraform aws credential
+	godotenv.Load(".env")
+	awsAcessKey := os.Getenv("TF_VAR_AWS_ACCESS_KEY_ID")
+	awsSecretAccessKey := os.Getenv("TF_VAR_AWS_SECRET_ACCESS_KEY")
+	if awsAcessKey == "" || awsSecretAccessKey == "" {
+		return nil, fmt.Errorf("AWS ACCESS KEY or AWS SECRET ACCESS KEY doensn't exist")
+	}
+	terraformAwsEnv["TF_VAR_AWS_ACCESS_KEY_ID"] = awsAcessKey
+	terraformAwsEnv["TF_VAR_AWS_SECRET_ACCESS_KEY"] = awsSecretAccessKey
 
 	// aws region, os
 	terraformAwsEnv["TF_VAR_AWS_DEFAULT_REGION"] = AwsSpec.Region

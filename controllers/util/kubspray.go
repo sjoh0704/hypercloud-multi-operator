@@ -57,4 +57,7 @@ var TerraformAwsEnv map[string]string = map[string]string{
 	"TF_VAR_vpn_connection_enable":     "false",
 	"TF_VAR_customer_gateway_ip":       "",
 	"TF_VAR_local_cidr":                "",
+	// TODO: secret으로 옮겨질 값
+	"TF_VAR_AWS_ACCESS_KEY_ID":     "access-key",
+	"TF_VAR_AWS_SECRET_ACCESS_KEY": "secret-access-key",
 }

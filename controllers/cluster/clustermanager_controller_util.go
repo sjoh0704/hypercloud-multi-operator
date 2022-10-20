@@ -167,22 +167,14 @@ func (r *ClusterManagerReconciler) DestroyInfrastrucutreJob(clusterManager *clus
 							Command: []string{"/bin/sh", "-c"},
 							Args:    []string{"./destroy.sh 2> /dev/termination-log;"},
 							Env:     envList,
-							EnvFrom: []coreV1.EnvFromSource{
-								{
-									ConfigMapRef: &coreV1.ConfigMapEnvSource{
-										LocalObjectReference: coreV1.LocalObjectReference{
-											Name: "terraform-default",
-										},
-									},
-								},
-								{
-									SecretRef: &coreV1.SecretEnvSource{
-										LocalObjectReference: coreV1.LocalObjectReference{
-											Name: "terraform-aws-credentials",
-										},
-									},
-								},
-							},
+							// 	{
+							// 		SecretRef: &coreV1.SecretEnvSource{
+							// 			LocalObjectReference: coreV1.LocalObjectReference{
+							// 				Name: "terraform-aws-credentials",
+							// 			},
+							// 		},
+							// 	},
+							// },
 							VolumeMounts: []coreV1.VolumeMount{
 								{
 									Name:      "kubespray-context",
@@ -376,22 +368,14 @@ func (r *ClusterManagerReconciler) ProvisioningInfrastrucutreJob(clusterManager 
 							Command: []string{"/bin/sh", "-c"},
 							Args:    []string{"./provision.sh 2> /dev/termination-log;"},
 							Env:     envList,
-							EnvFrom: []coreV1.EnvFromSource{
-								{
-									ConfigMapRef: &coreV1.ConfigMapEnvSource{
-										LocalObjectReference: coreV1.LocalObjectReference{
-											Name: "terraform-default",
-										},
-									},
-								},
-								{
-									SecretRef: &coreV1.SecretEnvSource{
-										LocalObjectReference: coreV1.LocalObjectReference{
-											Name: "terraform-aws-credentials",
-										},
-									},
-								},
-							},
+							// 	{
+							// 		SecretRef: &coreV1.SecretEnvSource{
+							// 			LocalObjectReference: coreV1.LocalObjectReference{
+							// 				Name: "terraform-aws-credentials",
+							// 			},
+							// 		},
+							// 	},
+							// },
 							VolumeMounts: []coreV1.VolumeMount{
 								{
 									Name:      "kubespray-context",

@@ -6,6 +6,7 @@ require (
 	github.com/argoproj/argo-cd/v2 v2.2.2
 	github.com/go-logr/logr v0.4.0
 	github.com/jetstack/cert-manager v1.5.4
+	github.com/joho/godotenv v1.4.0 // indirect
 	github.com/kubernetes-sigs/service-catalog v0.3.1
 	github.com/onsi/ginkgo v1.16.4
 	github.com/onsi/gomega v1.15.0
