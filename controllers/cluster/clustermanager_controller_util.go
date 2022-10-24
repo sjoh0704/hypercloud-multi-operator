@@ -320,7 +320,7 @@ func (r *ClusterManagerReconciler) InstallK8sJob(clusterManager *clusterV1alpha1
 							Name: "aws-private-key",
 							VolumeSource: coreV1.VolumeSource{
 								Secret: &coreV1.SecretVolumeSource{
-									SecretName:  "aws-private-key",
+									SecretName:  clusterManager.AwsSpec.SshKeyName,
 									DefaultMode: &privateKeyDefaultValue,
 								},
 							},
